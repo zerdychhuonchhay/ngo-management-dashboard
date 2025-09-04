@@ -4,6 +4,7 @@ import { Student, FollowUpRecord, Gender, StudentStatus, SponsorshipStatus, Acad
 import Modal from '../components/Modal';
 import { PlusIcon, DocumentAddIcon, ArrowUpIcon, ArrowDownIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
+import { SkeletonTable } from '../components/SkeletonLoader';
 
 const DetailCard: React.FC<{ title: string; data: Record<string, any> }> = ({ title, data }) => (
     <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6">
@@ -670,7 +671,7 @@ const StudentsPage: React.FC = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-10 text-body-color dark:text-gray-300">Loading students...</div>;
+    if (loading) return <SkeletonTable rows={5} cols={4} />;
 
     if (selectedStudent) {
         return (

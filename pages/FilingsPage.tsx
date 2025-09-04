@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
 import { GovernmentFiling, FilingStatus } from '../types';
 import Modal from '../components/Modal';
 import { useNotification } from '../contexts/NotificationContext';
 import { ArrowUpIcon, ArrowDownIcon } from '../components/Icons';
+import { SkeletonTable } from '../components/SkeletonLoader';
 
 const FilingForm: React.FC<{ filing: GovernmentFiling; onSave: (filing: GovernmentFiling) => void; onCancel: () => void; }> = ({ filing, onSave, onCancel }) => {
     const [formData, setFormData] = useState<GovernmentFiling>(filing);
@@ -128,7 +128,7 @@ const FilingsPage: React.FC = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-10 text-body-color dark:text-gray-300">Loading filings...</div>;
+    if (loading) return <SkeletonTable rows={5} cols={5} />;
 
     return (
         <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">

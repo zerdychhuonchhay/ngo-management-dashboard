@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from 'recharts';
 import { StudentStatus, Transaction, TransactionType } from '../types';
+import { SkeletonDashboard } from '../components/SkeletonLoader';
 
 interface StatCardProps {
     title: string;
@@ -106,7 +106,7 @@ const DashboardPage: React.FC = () => {
     };
 
     if (loading) {
-        return <div className="text-center p-10 text-body-color dark:text-gray-300">Loading dashboard...</div>;
+        return <SkeletonDashboard />;
     }
 
     const chartData = chartView === 'total' ? incomeExpenseData : (stats.monthlyBreakdown || []);

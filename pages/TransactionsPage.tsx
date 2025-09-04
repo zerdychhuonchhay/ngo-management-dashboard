@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
 import { Transaction, TransactionType, Student } from '../types';
 import Modal from '../components/Modal';
 import { PlusIcon, ArrowUpIcon, ArrowDownIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
+import { SkeletonTable } from '../components/SkeletonLoader';
 
 const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>) => void; onCancel: () => void; students: Student[] }> = ({ onSave, onCancel, students }) => {
     const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary";
@@ -150,7 +150,7 @@ const TransactionsPage: React.FC = () => {
         return filtered;
     }, [transactions, filterType, sortConfig]);
 
-    if (loading) return <div className="text-center p-10 text-body-color dark:text-gray-300">Loading transactions...</div>;
+    if (loading) return <SkeletonTable rows={10} cols={5} />;
 
     return (
         <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">
