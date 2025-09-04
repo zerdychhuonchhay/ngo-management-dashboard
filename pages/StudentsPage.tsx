@@ -20,6 +20,20 @@ const DetailCard: React.FC<{ title: string; data: Record<string, any> }> = ({ ti
     </div>
 );
 
+const NarrativeDetailCard: React.FC<{ title: string; data: Record<string, any> }> = ({ title, data }) => (
+    <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6">
+        <h3 className="text-xl font-semibold text-black dark:text-white mb-4 border-b border-stroke dark:border-strokedark pb-2">{title}</h3>
+        <div className="space-y-4">
+            {Object.entries(data).map(([key, value]) => (
+                <div key={key}>
+                    <p className="text-sm text-body-color dark:text-gray-300 capitalize">{key.replace(/_/g, ' ')}</p>
+                    <p className="font-medium text-black dark:text-white whitespace-pre-wrap">{value || 'N/A'}</p>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
 const FollowUpDetailModal: React.FC<{ record: FollowUpRecord, onClose: () => void }> = ({ record, onClose }) => {
     const DetailItem: React.FC<{ label: string, value?: string | number | string[], note?: string, noteLabel?: string }> = ({ label, value, note, noteLabel }) => (
         <div className="py-2">
@@ -88,6 +102,17 @@ const FollowUpDetailModal: React.FC<{ record: FollowUpRecord, onClose: () => voi
 
 const StudentDetailView: React.FC<{ student: Student, onBack: () => void, onAddFollowUp: () => void, onAddAcademicReport: () => void }> = ({ student, onBack, onAddFollowUp, onAddAcademicReport }) => {
     const [viewingFollowUp, setViewingFollowUp] = useState<FollowUpRecord | null>(null);
+
+    const narrativeData = {
+        ...(student.child_story && { "Child's Story / Reason for School": student.child_story }),
+        ...(student.other_notes && { 'Other Notes': student.other_notes }),
+        ...(student.child_responsibilities && { 'Child Responsibilities': student.child_responsibilities }),
+        ...(student.health_issues && { 'Health Issues': student.health_issues }),
+        ...(student.interaction_issues && { 'Interaction Issues': student.interaction_issues }),
+        ...(student.previous_schooling === YesNo.YES &&
+            (student.previous_schooling_details.when || student.previous_schooling_details.how_long || student.previous_schooling_details.where) &&
+            { 'Previous Schooling Details': `When: ${student.previous_schooling_details.when || 'N/A'}, How Long: ${student.previous_schooling_details.how_long || 'N/A'}, Where: ${student.previous_schooling_details.where || 'N/A'}` })
+    };
     
     return (
         <div className="space-y-6">
@@ -121,6 +146,13 @@ const StudentDetailView: React.FC<{ student: Student, onBack: () => void, onAddF
                 <DetailCard title="Education & Health" data={{ 'Currently in School?': student.currently_in_school, 'Previous Schooling?': student.previous_schooling, 'Grade Before EEP': student.grade_level_before_eep, 'Health Status': student.health_status, 'Interaction': student.interaction_with_others, 'Risk Level': `${student.risk_level}/5` }} />
                 <DetailCard title="Program & Sponsorship" data={{ school: student.school, current_grade: student.current_grade, eep_enroll_date: new Date(student.eep_enroll_date).toLocaleDateString(), sponsor_name: student.sponsor_name, has_housing_sponsorship: student.has_housing_sponsorship, has_sponsorship_contract: student.has_sponsorship_contract }} />
             </div>
+
+            {Object.keys(narrativeData).length > 0 && (
+                <NarrativeDetailCard 
+                    title="Narrative Information & Notes"
+                    data={narrativeData}
+                />
+            )}
             
             <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6">
                 <div className="flex justify-between items-center mb-4">
