@@ -230,4 +230,37 @@ export const api = {
             window.localStorage.removeItem(key);
         });
     },
+
+    getSponsorshipReport: async (status: 'All' | SponsorshipStatus) => {
+        let reportStudents = students;
+        if (status !== 'All') {
+            reportStudents = students.filter(s => s.sponsorship_status === status);
+        }
+        return simulateNetwork(reportStudents);
+    },
+    
+    getFinancialSummary: async (startDate: string, endDate: string) => {
+        const start = new Date(startDate).getTime();
+        const end = new Date(endDate).getTime();
+    
+        const filteredTransactions = transactions.filter(t => {
+            const tDate = new Date(t.date).getTime();
+            return tDate >= start && tDate <= end;
+        });
+    
+        const income = filteredTransactions
+            .filter(t => t.type === TransactionType.INCOME)
+            .reduce((sum, t) => sum + t.amount, 0);
+    
+        const expense = filteredTransactions
+            .filter(t => t.type === TransactionType.EXPENSE)
+            .reduce((sum, t) => sum + t.amount, 0);
+    
+        return simulateNetwork({
+            totalIncome: income,
+            totalExpense: expense,
+            netBalance: income - expense,
+            transactions: filteredTransactions,
+        });
+    },
 };

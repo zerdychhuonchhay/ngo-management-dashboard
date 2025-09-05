@@ -5,7 +5,8 @@ import DashboardPage from './pages/DashboardPage';
 import StudentsPage from './pages/StudentsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import FilingsPage from './pages/FilingsPage';
-import { DashboardIcon, StudentsIcon, TransactionsIcon, FilingsIcon, MenuIcon, MoonIcon, SunIcon, LogoIcon, SearchIcon, BellIcon, ArrowDownIcon, LogoutIcon, CloseIcon, ResetIcon } from './components/Icons';
+import ReportsPage from './pages/ReportsPage';
+import { DashboardIcon, StudentsIcon, TransactionsIcon, FilingsIcon, ReportsIcon, MenuIcon, MoonIcon, SunIcon, LogoIcon, SearchIcon, BellIcon, ArrowDownIcon, LogoutIcon, CloseIcon, ResetIcon } from './components/Icons';
 import { NotificationProvider } from './contexts/NotificationContext';
 import Toast from './components/Toast';
 import { api } from './services/api';
@@ -29,11 +30,12 @@ const App: React.FC = () => {
         { path: '/students', label: 'Students', icon: <StudentsIcon /> },
         { path: '/transactions', label: 'Transactions', icon: <TransactionsIcon /> },
         { path: '/filings', label: 'Filings', icon: <FilingsIcon /> },
+        { path: '/reports', label: 'Reports', icon: <ReportsIcon /> },
     ];
 
     const Header = () => {
         return (
-            <header className="sticky top-0 z-20 flex w-full bg-white dark:bg-box-dark shadow-sm">
+            <header className="sticky top-0 z-20 flex w-full bg-white dark:bg-box-dark shadow-sm no-print">
                 <div className="flex flex-grow items-center justify-between py-4 px-4 md:px-6 2xl:px-11">
                     <div className="flex items-center gap-2 sm:gap-4 lg:hidden">
                         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-black dark:text-white">
@@ -93,7 +95,7 @@ const App: React.FC = () => {
         };
         
         return (
-            <aside className={`absolute left-0 top-0 z-30 flex h-screen w-72 flex-col overflow-y-hidden bg-black dark:bg-box-dark duration-300 ease-linear lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`absolute left-0 top-0 z-30 flex h-screen w-72 flex-col overflow-y-hidden bg-black dark:bg-box-dark duration-300 ease-linear lg:static lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} no-print`}>
                 <div className="flex items-center justify-between gap-2 px-6 py-5.5 lg:py-6.5">
                     <NavLink to="/" className="flex items-center gap-2">
                         <LogoIcon />
@@ -157,6 +159,7 @@ const App: React.FC = () => {
                                     <Route path="/students" element={<StudentsPage />} />
                                     <Route path="/transactions" element={<TransactionsPage />} />
                                     <Route path="/filings" element={<FilingsPage />} />
+                                    <Route path="/reports" element={<ReportsPage />} />
                                 </Routes>
                             </div>
                         </main>
