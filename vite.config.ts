@@ -12,19 +12,6 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      },
-      // --- ADD THIS SECTION ---
-      server: {
-        // This is for local development (npm run dev)
-        host: true // This allows Vite to be accessible on your local network
-      },
-      preview: {
-        // This is for production preview (npm run preview)
-        host: true, // This is important for Railway
-        allowedHosts: [
-          "frontend-production-5a78.up.railway.app"
-        ]
       }
-      // ------------------------
     };
 });
