@@ -96,6 +96,8 @@ const simulateNetwork = <T,>(data: T, errorRate = 0): Promise<T> =>
         }, 500);
     });
 
+type StudentFormData = Omit<Student, 'profile_photo' | 'academic_reports' | 'follow_up_records' | 'out_of_program_date'> & { profile_photo?: File };
+
 export const api = {
     getDashboardStats: async () => {
         const totalStudents = students.length;
@@ -142,7 +144,12 @@ export const api = {
 
     getStudents: async () => simulateNetwork(students),
 
-    getStudentById: async (id: string) => simulateNetwork(students.find(s => s.student_id === id)),
+    getStudentById: async (id: string) => {
+        const student = students.find(s => s.student_id === id);
+        // Return a deep copy to prevent React state mutation issues where components
+        // don't re-render because they receive the same object reference.
+        return simulateNetwork(student ? JSON.parse(JSON.stringify(student)) : undefined);
+    },
 
     addStudent: async (studentData: Omit<Student, 'profile_photo' | 'academic_reports' | 'follow_up_records'> & { profile_photo?: File }) => {
         if (students.some(s => s.student_id === studentData.student_id)) {
@@ -169,19 +176,57 @@ export const api = {
             academic_reports: [],
             follow_up_records: [],
         };
-        students.push(newStudent);
+        students = [...students, newStudent];
         saveToStorage(STORAGE_KEYS.STUDENTS, students);
         return simulateNetwork(newStudent);
     },
 
+    updateStudent: async (studentData: StudentFormData) => {
+        const index = students.findIndex(s => s.student_id === studentData.student_id);
+        if (index === -1) {
+            throw new Error('Student not found for update.');
+        }
+
+        const existingStudent = students[index];
+        let photoUrl = existingStudent.profile_photo;
+
+        if (studentData.profile_photo instanceof File) {
+            photoUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.readAsDataURL(studentData.profile_photo);
+            });
+        }
+        
+        const { profile_photo, ...restOfStudentData } = studentData;
+
+        const updatedStudent: Student = {
+            ...existingStudent,
+            ...restOfStudentData,
+            profile_photo: photoUrl,
+        };
+        
+        students[index] = updatedStudent;
+        saveToStorage(STORAGE_KEYS.STUDENTS, students);
+        return simulateNetwork(updatedStudent);
+    },
+
+
     addAcademicReport: async (studentId: string, report: Omit<AcademicReport, 'id' | 'student_id'>) => {
-        const student = students.find(s => s.student_id === studentId);
-        if (student) {
+        const studentIndex = students.findIndex(s => s.student_id === studentId);
+        if (studentIndex !== -1) {
+            const student = students[studentIndex];
             const newReport: AcademicReport = { ...report, id: `AR-${Date.now()}`, student_id: studentId };
-            if (!student.academic_reports) {
-                student.academic_reports = [];
-            }
-            student.academic_reports.push(newReport);
+            
+            const updatedStudent = {
+                ...student,
+                academic_reports: [...(student.academic_reports || []), newReport]
+            };
+    
+            students = students.map((s, index) => 
+                index === studentIndex ? updatedStudent : s
+            );
+            
             saveToStorage(STORAGE_KEYS.STUDENTS, students);
             return simulateNetwork(newReport);
         }
@@ -189,13 +234,17 @@ export const api = {
     },
 
     addFollowUpRecord: async (studentId: string, record: Omit<FollowUpRecord, 'id' | 'student_id'>) => {
-        const student = students.find(s => s.student_id === studentId);
-        if (student) {
+        const studentIndex = students.findIndex(s => s.student_id === studentId);
+        if (studentIndex !== -1) {
+            const student = students[studentIndex];
             const newRecord: FollowUpRecord = { ...record, id: `FUR-${Date.now()}`, student_id: studentId };
-            if (!student.follow_up_records) {
-                student.follow_up_records = [];
-            }
-            student.follow_up_records.push(newRecord);
+            const updatedStudent = {
+                ...student,
+                follow_up_records: [...(student.follow_up_records || []), newRecord]
+            };
+            students = students.map((s, index) => 
+                index === studentIndex ? updatedStudent : s
+            );
             saveToStorage(STORAGE_KEYS.STUDENTS, students);
             return simulateNetwork(newRecord);
         }
@@ -208,7 +257,7 @@ export const api = {
 
     addTransaction: async (transaction: Omit<Transaction, 'id'>) => {
         const newTransaction: Transaction = { ...transaction, id: `T-${Date.now()}` };
-        transactions.unshift(newTransaction);
+        transactions = [newTransaction, ...transactions];
         saveToStorage(STORAGE_KEYS.TRANSACTIONS, transactions);
         return simulateNetwork(newTransaction);
     },

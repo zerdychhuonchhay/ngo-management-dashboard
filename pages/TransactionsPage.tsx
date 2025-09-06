@@ -26,7 +26,9 @@ const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>)
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave(formData);
+        if (window.confirm('Are you sure you want to save this transaction?')) {
+            onSave(formData);
+        }
     };
 
     return (
