@@ -238,6 +238,17 @@ export const api = {
         return simulateNetwork({ success: true });
     },
 
+    getAllAcademicReports: async (): Promise<AcademicReport[]> => {
+        const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
+        const allReports = students.flatMap(student => 
+            (student.academic_reports || []).map(report => ({
+                ...report,
+                student_name: `${student.first_name} ${student.last_name}`,
+            }))
+        );
+        return simulateNetwork(allReports);
+    },
+
     addAcademicReport: async (studentId: string, report: Omit<AcademicReport, 'id' | 'student_id'>) => {
         const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
         const studentIndex = students.findIndex(s => s.student_id === studentId);
@@ -258,6 +269,57 @@ export const api = {
             return simulateNetwork(newReport);
         }
         throw new Error('Student not found');
+    },
+
+    updateAcademicReport: async (studentId: string, reportId: string, updatedReportData: Omit<AcademicReport, 'id' | 'student_id' | 'student_name'>): Promise<AcademicReport> => {
+        const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
+        const studentIndex = students.findIndex(s => s.student_id === studentId);
+        if (studentIndex === -1) {
+            throw new Error('Student not found');
+        }
+
+        const student = students[studentIndex];
+        const reportIndex = student.academic_reports?.findIndex(r => r.id === reportId) ?? -1;
+        if (reportIndex === -1) {
+            throw new Error('Academic report not found');
+        }
+
+        const finalReport: AcademicReport = {
+            ...student.academic_reports![reportIndex],
+            ...updatedReportData,
+        };
+
+        const updatedReports = student.academic_reports!.map((r, i) => 
+            i === reportIndex ? finalReport : r
+        );
+        
+        const updatedStudent: Student = { ...student, academic_reports: updatedReports };
+        const updatedStudents = students.map((s, i) => (i === studentIndex ? updatedStudent : s));
+        
+        saveToStorage(STORAGE_KEYS.STUDENTS, updatedStudents);
+        return simulateNetwork(finalReport);
+    },
+
+    deleteAcademicReport: async (studentId: string, reportId: string): Promise<{ success: true }> => {
+        const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
+        const studentIndex = students.findIndex(s => s.student_id === studentId);
+        if (studentIndex === -1) {
+            throw new Error('Student not found');
+        }
+
+        const student = students[studentIndex];
+        const initialReportCount = student.academic_reports?.length ?? 0;
+        const updatedReports = student.academic_reports?.filter(r => r.id !== reportId) ?? [];
+
+        if (initialReportCount === updatedReports.length) {
+            throw new Error('Academic report not found for deletion');
+        }
+
+        const updatedStudent: Student = { ...student, academic_reports: updatedReports };
+        const updatedStudents = students.map((s, i) => (i === studentIndex ? updatedStudent : s));
+
+        saveToStorage(STORAGE_KEYS.STUDENTS, updatedStudents);
+        return simulateNetwork({ success: true });
     },
 
     addFollowUpRecord: async (studentId: string, record: Omit<FollowUpRecord, 'id' | 'student_id'>) => {
@@ -281,6 +343,33 @@ export const api = {
             return simulateNetwork(newRecord);
         }
         throw new Error('Student not found');
+    },
+
+    updateFollowUpRecord: async (studentId: string, updatedRecord: FollowUpRecord): Promise<FollowUpRecord> => {
+        const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
+        const studentIndex = students.findIndex(s => s.student_id === studentId);
+        if (studentIndex === -1) {
+            throw new Error('Student not found for updating follow-up record.');
+        }
+
+        const student = students[studentIndex];
+        const recordIndex = student.follow_up_records?.findIndex(r => r.id === updatedRecord.id) ?? -1;
+        if (recordIndex === -1) {
+            throw new Error('Follow-up record not found for update.');
+        }
+        
+        const updatedRecords = student.follow_up_records!.map((r, i) => 
+            i === recordIndex ? updatedRecord : r
+        );
+
+        const updatedStudent: Student = {
+            ...student,
+            follow_up_records: updatedRecords,
+        };
+
+        const updatedStudents = students.map((s, i) => (i === studentIndex ? updatedStudent : s));
+        saveToStorage(STORAGE_KEYS.STUDENTS, updatedStudents);
+        return simulateNetwork(updatedRecord);
     },
 
     updateStudentAcademicReports: async (studentId: string, reports: AcademicReport[]) => {
@@ -320,7 +409,6 @@ export const api = {
             }
             
             const newStudent: Student = {
-                // Default structure
                 student_id: '',
                 first_name: '',
                 last_name: '',
@@ -365,45 +453,47 @@ export const api = {
                 has_sponsorship_contract: false,
                 academic_reports: [],
                 follow_up_records: [],
-                // Overwrite with provided data
                 ...studentData,
             };
+
             studentsToAdd.push(newStudent);
-            existingIds.add(newStudent.student_id);
             importedCount++;
         });
 
-        const newStudentsList = [...studentsToAdd, ...students];
-        saveToStorage(STORAGE_KEYS.STUDENTS, newStudentsList);
-        
+        const updatedStudents = [...studentsToAdd, ...students];
+        saveToStorage(STORAGE_KEYS.STUDENTS, updatedStudents);
+
         return simulateNetwork({ importedCount, skippedCount });
+    },
+
+    getRecentTransactions: async () => {
+        const transactions = getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions);
+        const sorted = transactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return simulateNetwork(sorted.slice(0, 5));
     },
 
     getTransactions: async () => simulateNetwork(getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions)),
 
-    getRecentTransactions: async () => {
+    addTransaction: async (transactionData: Omit<Transaction, 'id'>) => {
         const transactions = getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions);
-        const sorted = [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        return simulateNetwork(sorted.slice(0, 5));
-    },
-
-    addTransaction: async (transaction: Omit<Transaction, 'id'>) => {
-        const transactions = getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions);
-        const newTransaction: Transaction = { ...transaction, id: `T-${Date.now()}` };
+        const newTransaction: Transaction = {
+            ...transactionData,
+            id: `T-${Date.now()}`,
+        };
         const newTransactions = [newTransaction, ...transactions];
         saveToStorage(STORAGE_KEYS.TRANSACTIONS, newTransactions);
         return simulateNetwork(newTransaction);
     },
 
-    updateTransaction: async (updatedTransaction: Transaction) => {
+    updateTransaction: async (transactionData: Transaction) => {
         const transactions = getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions);
-        const index = transactions.findIndex(t => t.id === updatedTransaction.id);
+        const index = transactions.findIndex(t => t.id === transactionData.id);
         if (index === -1) {
-            throw new Error('Transaction not found');
+            throw new Error('Transaction not found for update.');
         }
-        const updatedTransactions = transactions.map((t, i) => (i === index ? updatedTransaction : t));
+        const updatedTransactions = transactions.map((t, i) => (i === index ? transactionData : t));
         saveToStorage(STORAGE_KEYS.TRANSACTIONS, updatedTransactions);
-        return simulateNetwork(updatedTransaction);
+        return simulateNetwork(transactionData);
     },
     
     deleteTransaction: async (transactionId: string) => {
@@ -418,45 +508,41 @@ export const api = {
 
     getFilings: async () => simulateNetwork(getFromStorage(STORAGE_KEYS.FILINGS, defaultFilings)),
 
-    addFiling: async (filingData: Omit<GovernmentFiling, 'id'>) => {
+    addFiling: async (filingData: Omit<GovernmentFiling, 'id'> & { attached_file?: File | string }) => {
         const filings = getFromStorage(STORAGE_KEYS.FILINGS, defaultFilings);
         
-        let fileToSave: string | undefined = undefined;
+        let fileName: string | undefined = undefined;
         if (filingData.attached_file instanceof File) {
-            fileToSave = filingData.attached_file.name;
+            fileName = filingData.attached_file.name;
         }
 
-        const newFiling: GovernmentFiling = { 
-            ...filingData, 
-            attached_file: fileToSave,
-            id: `F-${Date.now()}` 
+        const newFiling: GovernmentFiling = {
+            ...filingData,
+            id: `F-${Date.now()}`,
+            attached_file: fileName,
         };
         const newFilings = [newFiling, ...filings];
         saveToStorage(STORAGE_KEYS.FILINGS, newFilings);
         return simulateNetwork(newFiling);
     },
-
-    updateFiling: async (updatedFiling: GovernmentFiling) => {
+    
+    updateFiling: async (filingData: GovernmentFiling & { attached_file?: File | string }) => {
         const filings = getFromStorage(STORAGE_KEYS.FILINGS, defaultFilings);
-        const index = filings.findIndex(f => f.id === updatedFiling.id);
+        const index = filings.findIndex(f => f.id === filingData.id);
         if (index === -1) {
-            throw new Error('Filing not found');
+            throw new Error('Filing not found for update.');
         }
 
-        // Handle file object separately to avoid JSON.stringify issues, saving only the file name for mock purposes.
-        let fileToSave: string | undefined = typeof updatedFiling.attached_file === 'string' ? updatedFiling.attached_file : undefined;
-        if (updatedFiling.attached_file instanceof File) {
-            fileToSave = updatedFiling.attached_file.name;
+        let fileName: string | undefined = filingData.attached_file as string | undefined;
+        if (filingData.attached_file instanceof File) {
+            fileName = filingData.attached_file.name;
         }
+        
+        const updatedFiling = { ...filingData, attached_file: fileName };
 
-        const finalFiling = {
-            ...updatedFiling,
-            attached_file: fileToSave,
-        };
-
-        const updatedFilings = filings.map((f, i) => (i === index ? finalFiling : f));
+        const updatedFilings = filings.map((f, i) => (i === index ? updatedFiling : f));
         saveToStorage(STORAGE_KEYS.FILINGS, updatedFilings);
-        return simulateNetwork(finalFiling);
+        return simulateNetwork(updatedFiling);
     },
 
     deleteFiling: async (filingId: string) => {
@@ -469,29 +555,31 @@ export const api = {
         return simulateNetwork({ success: true });
     },
 
-    // --- Task API ---
-    getTasks: async () => simulateNetwork(getFromStorage(STORAGE_KEYS.TASKS, defaultTasks)),
+    getTasks: async (): Promise<Task[]> => simulateNetwork(getFromStorage(STORAGE_KEYS.TASKS, defaultTasks)),
 
-    addTask: async (taskData: Omit<Task, 'id'>) => {
+    addTask: async (taskData: Omit<Task, 'id'>): Promise<Task> => {
         const tasks = getFromStorage(STORAGE_KEYS.TASKS, defaultTasks);
-        const newTask: Task = { ...taskData, id: `TASK-${Date.now()}` };
-        const newTasks = [newTask, ...tasks];
-        saveToStorage(STORAGE_KEYS.TASKS, newTasks);
+        const newTask: Task = {
+            ...taskData,
+            id: `TASK-${Date.now()}`
+        };
+        const updatedTasks = [newTask, ...tasks];
+        saveToStorage(STORAGE_KEYS.TASKS, updatedTasks);
         return simulateNetwork(newTask);
     },
 
-    updateTask: async (updatedTask: Task) => {
+    updateTask: async (taskData: Task): Promise<Task> => {
         const tasks = getFromStorage(STORAGE_KEYS.TASKS, defaultTasks);
-        const index = tasks.findIndex(t => t.id === updatedTask.id);
+        const index = tasks.findIndex(t => t.id === taskData.id);
         if (index === -1) {
-            throw new Error('Task not found');
+            throw new Error('Task not found for update.');
         }
-        const updatedTasks = tasks.map((t, i) => (i === index ? updatedTask : t));
+        const updatedTasks = tasks.map((t, i) => i === index ? taskData : t);
         saveToStorage(STORAGE_KEYS.TASKS, updatedTasks);
-        return simulateNetwork(updatedTask);
+        return simulateNetwork(taskData);
     },
 
-    deleteTask: async (taskId: string) => {
+    deleteTask: async (taskId: string): Promise<{ success: boolean }> => {
         const tasks = getFromStorage(STORAGE_KEYS.TASKS, defaultTasks);
         const updatedTasks = tasks.filter(t => t.id !== taskId);
         if (tasks.length === updatedTasks.length) {
@@ -500,46 +588,10 @@ export const api = {
         saveToStorage(STORAGE_KEYS.TASKS, updatedTasks);
         return simulateNetwork({ success: true });
     },
-
+    
     resetData: () => {
         Object.values(STORAGE_KEYS).forEach(key => {
             window.localStorage.removeItem(key);
         });
-        initializeData();
-    },
-
-    getSponsorshipReport: async (status: 'All' | SponsorshipStatus) => {
-        const students = getFromStorage(STORAGE_KEYS.STUDENTS, defaultStudents);
-        let reportStudents = students;
-        if (status !== 'All') {
-            reportStudents = students.filter(s => s.sponsorship_status === status);
-        }
-        return simulateNetwork(reportStudents);
-    },
-    
-    getFinancialSummary: async (startDate: string, endDate: string) => {
-        const transactions = getFromStorage(STORAGE_KEYS.TRANSACTIONS, defaultTransactions);
-        const start = new Date(startDate).getTime();
-        const end = new Date(endDate).getTime();
-    
-        const filteredTransactions = transactions.filter(t => {
-            const tDate = new Date(t.date).getTime();
-            return tDate >= start && tDate <= end;
-        });
-    
-        const income = filteredTransactions
-            .filter(t => t.type === TransactionType.INCOME)
-            .reduce((sum, t) => sum + t.amount, 0);
-    
-        const expense = filteredTransactions
-            .filter(t => t.type === TransactionType.EXPENSE)
-            .reduce((sum, t) => sum + t.amount, 0);
-    
-        return simulateNetwork({
-            totalIncome: income,
-            totalExpense: expense,
-            netBalance: income - expense,
-            transactions: filteredTransactions,
-        });
-    },
+    }
 };

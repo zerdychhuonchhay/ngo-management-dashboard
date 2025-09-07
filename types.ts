@@ -131,6 +131,7 @@ export interface Student {
 export interface AcademicReport {
     id: string;
     student_id: string;
+    student_name?: string; // Added for convenience
     report_period: string;
     grade_level: string;
     subjects_and_grades: string;

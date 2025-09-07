@@ -6,7 +6,7 @@ import DashboardPage from './pages/DashboardPage';
 import StudentsPage from './pages/StudentsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import FilingsPage from './pages/FilingsPage';
-import ReportsPage from './pages/ReportsPage';
+import AcademicsPage from './pages/AcademicsPage';
 import TasksPage from './pages/TasksPage';
 import { DashboardIcon, StudentsIcon, TransactionsIcon, FilingsIcon, ReportsIcon, TasksIcon, MenuIcon, MoonIcon, SunIcon, LogoIcon, SearchIcon, BellIcon, ArrowDownIcon, LogoutIcon, CloseIcon, ResetIcon } from './components/Icons';
 import { NotificationProvider } from './contexts/NotificationContext';
@@ -33,7 +33,7 @@ const App: React.FC = () => {
         { path: '/transactions', label: 'Transactions', icon: <TransactionsIcon /> },
         { path: '/filings', label: 'Filings', icon: <FilingsIcon /> },
         { path: '/tasks', label: 'Tasks', icon: <TasksIcon /> },
-        { path: '/reports', label: 'Reports', icon: <ReportsIcon /> },
+        { path: '/academics', label: 'Academics', icon: <ReportsIcon /> },
     ];
 
     const Header = () => {
@@ -163,7 +163,7 @@ const App: React.FC = () => {
                                     <Route path="/transactions" element={<TransactionsPage />} />
                                     <Route path="/filings" element={<FilingsPage />} />
                                     <Route path="/tasks" element={<TasksPage />} />
-                                    <Route path="/reports" element={<ReportsPage />} />
+                                    <Route path="/academics" element={<AcademicsPage />} />
                                 </Routes>
                             </div>
                         </main>

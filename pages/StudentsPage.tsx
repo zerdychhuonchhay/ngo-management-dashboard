@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { api } from '../services/api';
 import { Student, FollowUpRecord, Gender, StudentStatus, SponsorshipStatus, AcademicReport, WellbeingStatus, YesNo, RISK_FACTORS, ParentDetails, HealthStatus, InteractionStatus, TransportationType } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, DocumentAddIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, TrashIcon, UploadIcon } from '../components/Icons';
+import { PlusIcon, DocumentAddIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, TrashIcon, UploadIcon, DownloadIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 import { SkeletonTable } from '../components/SkeletonLoader';
 
@@ -73,6 +73,13 @@ const FormTextArea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> &
      <div>
         <label htmlFor={props.id || props.name} className="block text-sm font-medium text-black dark:text-white mb-1">{label}</label>
         <textarea {...props} className="w-full rounded border-[1.5px] border-stroke bg-gray-2 py-2 px-4 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary min-h-[100px]" />
+    </div>
+);
+
+const FormCheckbox: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props }) => (
+    <div className="flex items-center gap-3">
+        <input type="checkbox" {...props} id={props.id || props.name} className="form-checkbox h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary dark:border-strokedark dark:bg-form-input" />
+        <label htmlFor={props.id || props.name} className="font-medium text-black dark:text-white">{label}</label>
     </div>
 );
 
@@ -228,6 +235,34 @@ const StudentForm: React.FC<{ student?: Student | null; onSave: (data: any) => v
                   <FormInput label="Sponsor Name" name="sponsor_name" value={formData.sponsor_name || ''} onChange={handleChange} />
             </FormSection>
 
+            <FormSection title="Risk Assessment & Narrative" className="md:grid-cols-2">
+                <FormInput label="Risk Level (1-5)" name="risk_level" type="number" min="1" max="5" value={formData.risk_level} onChange={handleChange} />
+                <FormSelect label="Transportation" name="transportation" value={formData.transportation} onChange={handleChange}>
+                    {Object.values(TransportationType).map(t => <option key={t} value={t}>{t}</option>)}
+                </FormSelect>
+                <FormSelect label="Health Status" name="health_status" value={formData.health_status} onChange={handleChange}>
+                    {Object.values(HealthStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                </FormSelect>
+                <FormSelect label="Interaction with Others" name="interaction_with_others" value={formData.interaction_with_others} onChange={handleChange}>
+                    {Object.values(InteractionStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                </FormSelect>
+                <div className="md:col-span-2">
+                <FormTextArea label="Health Issues" name="health_issues" value={formData.health_issues || ''} onChange={handleChange} />
+                </div>
+                <div className="md:col-span-2">
+                <FormTextArea label="Interaction Issues" name="interaction_issues" value={formData.interaction_issues || ''} onChange={handleChange} />
+                </div>
+                <div className="md:col-span-2">
+                    <FormTextArea label="Child Story" name="child_story" value={formData.child_story} onChange={handleChange} />
+                </div>
+                <div className="md:col-span-2">
+                    <FormTextArea label="Other Notes" name="other_notes" value={formData.other_notes} onChange={handleChange} />
+                </div>
+                <div className="md:col-span-2 flex items-center pt-2">
+                    <FormCheckbox label="Sponsorship Contract on File" name="has_sponsorship_contract" checked={!!formData.has_sponsorship_contract} onChange={handleChange} />
+                </div>
+            </FormSection>
+
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
                 <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">{isEdit ? 'Update Student' : 'Save Student'}</button>
@@ -276,38 +311,51 @@ const AcademicReportForm: React.FC<{ studentId: string; onSave: (report: any) =>
     );
 };
 
-const FollowUpForm: React.FC<{ student: Student; onSave: (record: any) => void; onCancel: () => void }> = ({ student, onSave, onCancel }) => {
-    const [formData, setFormData] = useState<Omit<FollowUpRecord, 'id' | 'student_id'>>({
-        child_name: `${student.first_name} ${student.last_name}`,
-        child_current_age: calculateAge(student.date_of_birth),
-        date_of_follow_up: formatDateForInput(new Date().toISOString()),
-        location: '',
-        parent_guardian: student.guardian_name,
-        physical_health: WellbeingStatus.NA,
-        physical_health_notes: '',
-        social_interaction: WellbeingStatus.NA,
-        social_interaction_notes: '',
-        home_life: WellbeingStatus.NA,
-        home_life_notes: '',
-        drugs_alcohol_violence: YesNo.NA,
-        drugs_alcohol_violence_notes: '',
-        risk_factors_list: [],
-        risk_factors_details: '',
-        condition_of_home: WellbeingStatus.NA,
-        condition_of_home_notes: '',
-        mother_working: YesNo.NA,
-        father_working: YesNo.NA,
-        other_family_member_working: YesNo.NA,
-        current_work_details: '',
-        attending_church: YesNo.NA,
-        staff_notes: '',
-        changes_recommendations: '',
-        child_protection_concerns: YesNo.NA,
-        human_trafficking_risk: YesNo.NA,
-        completed_by: '',
-        date_completed: formatDateForInput(new Date().toISOString()),
-        reviewed_by: '',
-        date_reviewed: formatDateForInput(new Date().toISOString()),
+const FollowUpForm: React.FC<{ student: Student; onSave: (record: any) => void; onCancel: () => void, initialData?: FollowUpRecord | null }> = ({ student, onSave, onCancel, initialData }) => {
+    const isEdit = !!initialData;
+    const [formData, setFormData] = useState<Omit<FollowUpRecord, 'id' | 'student_id'>>(() => {
+        const defaults = {
+            child_name: `${student.first_name} ${student.last_name}`,
+            child_current_age: calculateAge(student.date_of_birth),
+            date_of_follow_up: formatDateForInput(new Date().toISOString()),
+            location: '',
+            parent_guardian: student.guardian_name,
+            physical_health: WellbeingStatus.NA,
+            physical_health_notes: '',
+            social_interaction: WellbeingStatus.NA,
+            social_interaction_notes: '',
+            home_life: WellbeingStatus.NA,
+            home_life_notes: '',
+            drugs_alcohol_violence: YesNo.NA,
+            drugs_alcohol_violence_notes: '',
+            risk_factors_list: [],
+            risk_factors_details: '',
+            condition_of_home: WellbeingStatus.NA,
+            condition_of_home_notes: '',
+            mother_working: YesNo.NA,
+            father_working: YesNo.NA,
+            other_family_member_working: YesNo.NA,
+            current_work_details: '',
+            attending_church: YesNo.NA,
+            staff_notes: '',
+            changes_recommendations: '',
+            child_protection_concerns: YesNo.NA,
+            human_trafficking_risk: YesNo.NA,
+            completed_by: '',
+            date_completed: formatDateForInput(new Date().toISOString()),
+            reviewed_by: '',
+            date_reviewed: '',
+        };
+        if (isEdit && initialData) {
+            return {
+                ...defaults,
+                ...initialData,
+                date_of_follow_up: formatDateForInput(initialData.date_of_follow_up),
+                date_completed: formatDateForInput(initialData.date_completed),
+                date_reviewed: formatDateForInput(initialData.date_reviewed),
+            }
+        }
+        return defaults;
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -401,7 +449,7 @@ const FollowUpForm: React.FC<{ student: Student; onSave: (record: any) => void; 
 
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Save Record</button>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">{isEdit ? 'Update Record' : 'Save Record'}</button>
             </div>
         </form>
     );
@@ -575,7 +623,11 @@ const StudentsPage: React.FC = () => {
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [isAdding, setIsAdding] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
-    const [modal, setModal] = useState<'add_report' | 'add_follow_up' | null>(null);
+    const [modal, setModal] = useState<'add_report' | 'add_follow_up' | 'edit_follow_up' | null>(null);
+    const [editingFollowUp, setEditingFollowUp] = useState<FollowUpRecord | null>(null);
+    const [recordForPdf, setRecordForPdf] = useState<FollowUpRecord | null>(null);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const printableRef = useRef<HTMLDivElement>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Student | 'age'; order: 'asc' | 'desc' } | null>({ key: 'first_name', order: 'asc' });
     const { showToast } = useNotification();
@@ -598,9 +650,60 @@ const StudentsPage: React.FC = () => {
         fetchStudents();
     }, [fetchStudents]);
     
+    useEffect(() => {
+        if (!recordForPdf || !printableRef.current) return;
+    
+        const generatePdf = async () => {
+            const { jsPDF } = (window as any).jspdf;
+            const html2canvas = (window as any).html2canvas;
+            const elementToCapture = printableRef.current!;
+    
+            try {
+                const canvas = await html2canvas(elementToCapture, { scale: 2, useCORS: true, windowWidth: elementToCapture.scrollWidth, windowHeight: elementToCapture.scrollHeight });
+                const imgData = canvas.toDataURL('image/png');
+                
+                const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: 'a4' });
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                const ratio = imgWidth / imgHeight;
+                
+                const finalImgWidth = pdfWidth - 40; // with margin
+                const finalImgHeight = finalImgWidth / ratio;
+                
+                let heightLeft = finalImgHeight;
+                let position = 20;
+    
+                pdf.addImage(imgData, 'PNG', 20, position, finalImgWidth, finalImgHeight);
+                heightLeft -= (pdfHeight - 40);
+    
+                while (heightLeft > 0) {
+                    position = -heightLeft + 20;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 20, position, finalImgWidth, finalImgHeight);
+                    heightLeft -= (pdfHeight - 40);
+                }
+                
+                const studentName = recordForPdf.child_name.replace(/\s+/g, '-');
+                const date = new Date(recordForPdf.date_of_follow_up).toISOString().split('T')[0];
+                pdf.save(`Follow-Up-Report-${studentName}-${date}.pdf`);
+    
+            } catch (error) {
+                console.error("Error generating PDF:", error);
+                showToast('An error occurred while generating the PDF.', 'error');
+            } finally {
+                setRecordForPdf(null);
+                setIsGeneratingPdf(false);
+            }
+        };
+        const timer = setTimeout(generatePdf, 100);
+        return () => clearTimeout(timer);
+    }, [recordForPdf, showToast]);
+
     const handleSaveStudent = async (studentData: any) => {
         try {
-            if (selectedStudent) {
+            if (selectedStudent && isAdding) {
                 await api.updateStudent({ ...studentData, student_id: selectedStudent.student_id });
                 showToast('Student updated successfully!', 'success');
             } else {
@@ -644,13 +747,20 @@ const StudentsPage: React.FC = () => {
     const handleSaveFollowUp = async (recordData: any) => {
         if (!selectedStudent) return;
         try {
-            await api.addFollowUpRecord(selectedStudent.student_id, recordData);
-            showToast('Follow-up record added!', 'success');
+            if (editingFollowUp) {
+                await api.updateFollowUpRecord(selectedStudent.student_id, { ...recordData, id: editingFollowUp.id, student_id: selectedStudent.student_id });
+                showToast('Follow-up record updated!', 'success');
+            } else {
+                await api.addFollowUpRecord(selectedStudent.student_id, recordData);
+                showToast('Follow-up record added!', 'success');
+            }
+            
             setModal(null);
+            setEditingFollowUp(null);
             const updatedStudent = await api.getStudentById(selectedStudent.student_id);
             if (updatedStudent) setSelectedStudent(updatedStudent);
         } catch (error) {
-            showToast('Failed to add record.', 'error');
+            showToast('Failed to save record.', 'error');
         }
     };
 
@@ -663,6 +773,15 @@ const StudentsPage: React.FC = () => {
         } catch (error) {
              showToast('An error occurred during import.', 'error');
         }
+    };
+
+    const handleDownloadPdf = (record: FollowUpRecord) => {
+        if (typeof (window as any).jspdf === 'undefined' || typeof (window as any).html2canvas === 'undefined') {
+            showToast('PDF generation libraries are still loading. Please try again.', 'error');
+            return;
+        }
+        setIsGeneratingPdf(true);
+        setRecordForPdf(record);
     };
     
     const sortedAndFilteredStudents = useMemo(() => {
@@ -697,7 +816,7 @@ const StudentsPage: React.FC = () => {
         setSortConfig({ key, order });
     };
 
-    const FollowUpRecordView: React.FC<{ record: FollowUpRecord }> = ({ record }) => {
+    const FollowUpRecordView: React.FC<{ record: FollowUpRecord; onEdit: (record: FollowUpRecord) => void; onDownload: (record: FollowUpRecord) => void; }> = ({ record, onEdit, onDownload }) => {
         const InfoPair: React.FC<{ label: string; value?: string | number | null; children?: React.ReactNode }> = ({ label, value, children }) => (
             <div>
                 <p className="text-sm text-body-color dark:text-gray-300">{label}</p>
@@ -717,7 +836,7 @@ const StudentsPage: React.FC = () => {
         const hasStaffNotesData = !!(record.staff_notes || record.changes_recommendations);
         
         return (
-            <div className="space-y-4 p-4 bg-gray-2/50 dark:bg-box-dark-2/50">
+             <div className="space-y-4 p-4 bg-gray-2/50 dark:bg-box-dark-2/50">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                     <InfoPair label="Date of Follow Up" value={new Date(record.date_of_follow_up).toLocaleDateString()} />
                     <InfoPair label="Location" value={record.location} />
@@ -767,9 +886,24 @@ const StudentsPage: React.FC = () => {
                         <InfoPair label="Child Protection Concerns?" value={record.child_protection_concerns} />
                         <InfoPair label="Human Trafficking Risk?" value={record.human_trafficking_risk} />
                         <InfoPair label="Completed By" value={`${record.completed_by} on ${new Date(record.date_completed).toLocaleDateString()}`} />
-                        <InfoPair label="Reviewed By" value={record.reviewed_by ? `${record.reviewed_by} on ${new Date(record.date_reviewed).toLocaleDateString()}` : 'N/A'} />
+                        <InfoPair label="Reviewed By" value={record.reviewed_by && record.date_reviewed ? `${record.reviewed_by} on ${new Date(record.date_reviewed).toLocaleDateString()}` : 'N/A'} />
                     </div>
                 </Section>
+                <div className="flex gap-2 justify-end pt-2">
+                    <button onClick={() => onEdit(record)} className="flex items-center bg-primary text-white px-3 py-1.5 text-sm rounded-lg hover:opacity-90"><EditIcon /><span className="ml-1.5">Edit</span></button>
+                    <button 
+                        onClick={() => onDownload(record)} 
+                        disabled={isGeneratingPdf}
+                        className="flex items-center bg-secondary text-white px-3 py-1.5 text-sm rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {isGeneratingPdf && record.id === recordForPdf?.id ? (
+                             <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        ) : (
+                            <DownloadIcon />
+                        )}
+                        <span className="ml-1.5">{isGeneratingPdf && record.id === recordForPdf?.id ? 'Generating...' : 'Download PDF'}</span>
+                    </button>
+                </div>
             </div>
         );
     };
@@ -796,6 +930,7 @@ const StudentsPage: React.FC = () => {
                         'Student Status': student.student_status,
                         'Sponsorship Status': student.sponsorship_status,
                         'Sponsor Name': student.sponsor_name,
+                        'Sponsorship Contract on File': student.has_sponsorship_contract,
                         'School': student.school,
                         'Current Grade': student.current_grade,
                         'EEP Enroll Date': new Date(student.eep_enroll_date).toLocaleDateString(),
@@ -813,6 +948,14 @@ const StudentsPage: React.FC = () => {
                  'Siblings': student.siblings_count,
                  'Household Members': student.household_members_count,
                  'Annual Income': `$${student.annual_income}`,
+                 'Transportation': student.transportation,
+            }} />
+            <NarrativeDetailCard title="Risk & Health Assessment" data={{
+                'Risk Level': `${student.risk_level}/5`,
+                'Health Status': student.health_status,
+                'Health Issues': student.health_issues,
+                'Interaction with Others': student.interaction_with_others,
+                'Interaction Issues': student.interaction_issues,
             }} />
              <NarrativeDetailCard title="Narrative Information" data={{ 'Child Story': student.child_story, 'Other Notes': student.other_notes }} />
             
@@ -826,7 +969,7 @@ const StudentsPage: React.FC = () => {
             <div>
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="text-xl font-semibold text-black dark:text-white">Follow-up History</h3>
-                    <button onClick={() => setModal('add_follow_up')} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"><DocumentAddIcon /><span className="ml-2">New Follow-up</span></button>
+                    <button onClick={() => { setEditingFollowUp(null); setModal('add_follow_up'); }} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"><DocumentAddIcon /><span className="ml-2">New Follow-up</span></button>
                 </div>
                 <div className="space-y-2">
                     {student.follow_up_records && student.follow_up_records.length > 0 ? (
@@ -841,7 +984,7 @@ const StudentsPage: React.FC = () => {
                                     <span className="font-semibold text-black dark:text-white">Follow-up from {new Date(record.date_of_follow_up).toLocaleDateString()}</span>
                                     <span>{openFollowUpId === record.id ? <ArrowUpIcon /> : <ArrowDownIcon />}</span>
                                 </button>
-                                {openFollowUpId === record.id && <FollowUpRecordView record={record} />}
+                                {openFollowUpId === record.id && <FollowUpRecordView record={record} onEdit={(r) => { setEditingFollowUp(r); setModal('edit_follow_up'); }} onDownload={handleDownloadPdf} />}
                             </div>
                         ))
                     ) : (
@@ -855,9 +998,9 @@ const StudentsPage: React.FC = () => {
                     <AcademicReportForm studentId={student.student_id} onSave={handleSaveAcademicReport} onCancel={() => setModal(null)} />
                 </Modal>
             )}
-            {modal === 'add_follow_up' && (
-                <Modal isOpen={true} onClose={() => setModal(null)} title="Add Monthly Follow-up Report">
-                    <FollowUpForm student={student} onSave={handleSaveFollowUp} onCancel={() => setModal(null)} />
+            {(modal === 'add_follow_up' || modal === 'edit_follow_up') && (
+                <Modal isOpen={true} onClose={() => { setModal(null); setEditingFollowUp(null); }} title={editingFollowUp ? "Edit Follow-up Report" : "Add Monthly Follow-up Report"}>
+                    <FollowUpForm student={student} onSave={handleSaveFollowUp} onCancel={() => { setModal(null); setEditingFollowUp(null); }} initialData={editingFollowUp} />
                 </Modal>
             )}
         </div>
@@ -869,73 +1012,167 @@ const StudentsPage: React.FC = () => {
         return <StudentDetailView student={selectedStudent} onBack={() => setSelectedStudent(null)} />;
     }
 
-    return (
-        <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">
-             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                 <input type="text" placeholder="Search students..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full sm:w-1/2 rounded-lg border-[1.5px] border-stroke bg-gray-2 py-2 px-5 font-medium outline-none transition focus:border-primary text-black dark:border-strokedark dark:bg-form-input dark:text-white"/>
-                 <div className="flex w-full sm:w-auto gap-2">
-                    <button onClick={() => setIsImporting(true)} className="flex w-full sm:w-auto justify-center items-center bg-secondary text-white px-4 py-2 rounded-lg hover:opacity-90">
-                        <UploadIcon /> <span className="ml-2">Import</span>
-                    </button>
-                    <button onClick={() => { setSelectedStudent(null); setIsAdding(true); }} className="flex w-full sm:w-auto justify-center items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
-                        <PlusIcon /> <span className="ml-2">Add Student</span>
-                    </button>
-                 </div>
+    const PrintableFollowUpRecord: React.FC<{ record: FollowUpRecord, student: Student }> = ({ record, student }) => {
+        const InfoPair: React.FC<{ label: string; value?: string | number | boolean | null; className?: string; children?: React.ReactNode; }> = ({ label, value, className, children }) => (
+            <div className={className}>
+                <p className="text-xs text-gray-600 uppercase font-semibold">{label}</p>
+                <div className="font-medium text-black break-words">{children || (typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value) || <span className="text-gray-500">N/A</span>}</div>
             </div>
+        );
+        const Section: React.FC<{ title: string; children: React.ReactNode; }> = ({ title, children }) => (
+            <div className="mb-4">
+                <h2 className="text-base font-bold border-b border-gray-300 pb-1 mb-2">{title}</h2>
+                <div className="space-y-2">{children}</div>
+            </div>
+        );
+        return (
+            <div className="p-6 bg-white text-black font-sans text-sm" style={{ width: '210mm' }}>
+                <header className="flex justify-between items-center border-b-2 border-black pb-2 mb-4">
+                    <div>
+                        <h1 className="text-xl font-bold">Student Monthly Follow-Up Report</h1>
+                        <p className="text-gray-700">Confidential Program Report</p>
+                    </div>
+                    <div className="text-right text-xs">
+                        <p className="font-bold">NGO Sponsorship Program</p>
+                        <p>Generated on: {new Date().toLocaleDateString()}</p>
+                    </div>
+                </header>
+                <Section title="Section 1: Client Information">
+                    <div className="grid grid-cols-4 gap-2">
+                        <InfoPair label="Child's Name" value={record.child_name} />
+                        <InfoPair label="Child's Age" value={record.child_current_age} />
+                        <InfoPair label="Student ID" value={student.student_id} />
+                        <InfoPair label="Date of Follow Up" value={new Date(record.date_of_follow_up).toLocaleDateString()} />
+                        <InfoPair label="Location" value={record.location} className="col-span-2" />
+                        <InfoPair label="Parent/Guardian" value={record.parent_guardian} className="col-span-2" />
+                    </div>
+                </Section>
+                 <Section title="Section 2: Well-being Progress">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <InfoPair label="Physical Health" value={record.physical_health} />
+                        <InfoPair label="Notes" value={record.physical_health_notes} />
+                        <InfoPair label="Social Interaction" value={record.social_interaction} />
+                        <InfoPair label="Notes" value={record.social_interaction_notes} />
+                        <InfoPair label="Home Life" value={record.home_life} />
+                        <InfoPair label="Notes" value={record.home_life_notes} />
+                        <InfoPair label="Evidence of Drugs/Alcohol/Violence?" value={record.drugs_alcohol_violence} />
+                        <InfoPair label="Notes" value={record.drugs_alcohol_violence_notes} />
+                    </div>
+                </Section>
+                <Section title="Section 2a: Risk Factors">
+                    {record.risk_factors_list.length > 0 ? (
+                        <InfoPair label="Identified Risk Factors" className="mb-2">
+                            <ul className="list-disc list-inside grid grid-cols-3 text-xs">
+                                {record.risk_factors_list.map(r => <li key={r}>{r}</li>)}
+                            </ul>
+                        </InfoPair>
+                    ) : <InfoPair label="Identified Risk Factors" value="None identified." />}
+                    <InfoPair label="Details on Risk Factors" value={record.risk_factors_details} />
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 pt-2">
+                         <InfoPair label="Condition of Home" value={record.condition_of_home} />
+                         <InfoPair label="Notes" value={record.condition_of_home_notes} />
+                         <InfoPair label="Family Work Details" value={record.current_work_details} className="col-span-2" />
+                         <InfoPair label="Mother Working?" value={record.mother_working} />
+                         <InfoPair label="Father Working?" value={record.father_working} />
+                         <InfoPair label="Other Family Member Working?" value={record.other_family_member_working} />
+                         <InfoPair label="Attending Church/House of Prayer?" value={record.attending_church} />
+                    </div>
+                </Section>
+                <Section title="Section 4: EEP Staff Notes">
+                    <InfoPair label="Notes" value={record.staff_notes} />
+                    <InfoPair label="Changes/Recommendations" value={record.changes_recommendations} />
+                </Section>
+                <Section title="Section 5: Conclusion & Review">
+                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                        <InfoPair label="Child Protection Concerns?" value={record.child_protection_concerns} />
+                        <InfoPair label="Increased Human Trafficking Risk?" value={record.human_trafficking_risk} />
+                         <InfoPair label="Completed By" value={record.completed_by} />
+                        <InfoPair label="Date Completed" value={new Date(record.date_completed).toLocaleDateString()} />
+                        <InfoPair label="Reviewed By" value={record.reviewed_by} />
+                        <InfoPair label="Date Reviewed" value={record.date_reviewed ? new Date(record.date_reviewed).toLocaleDateString() : 'N/A'} />
+                     </div>
+                </Section>
+                <footer className="mt-6 pt-2 border-t text-center text-xs text-gray-500">
+                    <p>End of Report</p>
+                </footer>
+            </div>
+        );
+    };
 
-            <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                    <thead className="bg-gray-2 dark:bg-box-dark-2">
-                        <tr>
-                             {([
-                                { key: 'first_name', label: 'Name' },
-                                { key: 'student_id', label: 'Student ID' },
-                                { key: 'age', label: 'Age' },
-                                { key: 'date_of_birth', label: 'Date of Birth' },
-                                { key: 'student_status', label: 'Status' },
-                                { key: 'sponsorship_status', label: 'Sponsorship' },
-                            ] as {key: keyof Student | 'age', label: string}[]).map(({key, label}) => (
-                                <th key={key} className="p-4 font-medium text-black dark:text-white">
-                                    <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort(key)}>
-                                        {label}
-                                        {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                    </button>
-                                </th>
-                            ))}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {sortedAndFilteredStudents.map((s, index) => (
-                            <tr key={s.student_id} className="cursor-pointer hover:bg-gray dark:hover:bg-box-dark-2" onClick={() => setSelectedStudent(s)}>
-                                <td className="p-4 flex items-center gap-3">
-                                    <img src={s.profile_photo || `https://i.pravatar.cc/150?u=${s.student_id}`} alt={`${s.first_name}`} className="w-10 h-10 rounded-full object-cover"/>
-                                    <div>
-                                        <p className="font-medium text-black dark:text-white">{s.first_name} {s.last_name}</p>
-                                        <p className="text-sm text-body-color dark:text-gray-300">{s.gender}</p>
-                                    </div>
-                                </td>
-                                <td className="p-4 text-black dark:text-white">{s.student_id}</td>
-                                <td className="p-4 text-body-color dark:text-gray-300">{calculateAge(s.date_of_birth)}</td>
-                                <td className="p-4 text-body-color dark:text-gray-300">{new Date(s.date_of_birth).toLocaleDateString()}</td>
-                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.student_status === StudentStatus.ACTIVE ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>{s.student_status}</span></td>
-                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.sponsorship_status === SponsorshipStatus.SPONSORED ? 'bg-primary/10 text-primary' : 'bg-gray-400/20 text-gray-400'}`}>{s.sponsorship_status}</span></td>
+    return (
+        <>
+            <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                    <input type="text" placeholder="Search students..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full sm:w-1/2 rounded-lg border-[1.5px] border-stroke bg-gray-2 py-2 px-5 font-medium outline-none transition focus:border-primary text-black dark:border-strokedark dark:bg-form-input dark:text-white"/>
+                    <div className="flex w-full sm:w-auto gap-2">
+                        <button onClick={() => setIsImporting(true)} className="flex w-full sm:w-auto justify-center items-center bg-secondary text-white px-4 py-2 rounded-lg hover:opacity-90">
+                            <UploadIcon /> <span className="ml-2">Import</span>
+                        </button>
+                        <button onClick={() => { setSelectedStudent(null); setIsAdding(true); }} className="flex w-full sm:w-auto justify-center items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
+                            <PlusIcon /> <span className="ml-2">Add Student</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-2 dark:bg-box-dark-2">
+                            <tr>
+                                {([
+                                    { key: 'first_name', label: 'Name' },
+                                    { key: 'student_id', label: 'Student ID' },
+                                    { key: 'age', label: 'Age' },
+                                    { key: 'date_of_birth', label: 'Date of Birth' },
+                                    { key: 'student_status', label: 'Status' },
+                                    { key: 'sponsorship_status', label: 'Sponsorship' },
+                                ] as {key: keyof Student | 'age', label: string}[]).map(({key, label}) => (
+                                    <th key={key} className="p-4 font-medium text-black dark:text-white">
+                                        <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort(key)}>
+                                            {label}
+                                            {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
+                                        </button>
+                                    </th>
+                                ))}
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {sortedAndFilteredStudents.map((s) => (
+                                <tr key={s.student_id} className="cursor-pointer hover:bg-gray dark:hover:bg-box-dark-2" onClick={() => setSelectedStudent(s)}>
+                                    <td className="p-4 flex items-center gap-3">
+                                        <img src={s.profile_photo || `https://i.pravatar.cc/150?u=${s.student_id}`} alt={`${s.first_name}`} className="w-10 h-10 rounded-full object-cover"/>
+                                        <div>
+                                            <p className="font-medium text-black dark:text-white">{s.first_name} {s.last_name}</p>
+                                            <p className="text-sm text-body-color dark:text-gray-300">{s.gender}</p>
+                                        </div>
+                                    </td>
+                                    <td className="p-4 text-black dark:text-white">{s.student_id}</td>
+                                    <td className="p-4 text-body-color dark:text-gray-300">{calculateAge(s.date_of_birth)}</td>
+                                    <td className="p-4 text-body-color dark:text-gray-300">{new Date(s.date_of_birth).toLocaleDateString()}</td>
+                                    <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.student_status === StudentStatus.ACTIVE ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>{s.student_status}</span></td>
+                                    <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.sponsorship_status === SponsorshipStatus.SPONSORED ? 'bg-primary/10 text-primary' : 'bg-gray-400/20 text-gray-400'}`}>{s.sponsorship_status}</span></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <Modal isOpen={isAdding} onClose={() => { setIsAdding(false); setSelectedStudent(null); }} title={selectedStudent && isAdding ? 'Edit Student' : 'Add New Student'}>
+                    <StudentForm 
+                        key={selectedStudent ? selectedStudent.student_id : 'new-student'}
+                        student={selectedStudent} 
+                        onSave={handleSaveStudent} 
+                        onCancel={() => { setIsAdding(false); setSelectedStudent(null); }} 
+                    />
+                </Modal>
+                
+                {isImporting && <StudentImportModal onImport={handleImport} onClose={() => setIsImporting(false)} />}
             </div>
-            
-            <Modal isOpen={isAdding} onClose={() => { setIsAdding(false); setSelectedStudent(null); }} title={selectedStudent ? 'Edit Student' : 'Add New Student'}>
-                <StudentForm 
-                    key={selectedStudent ? selectedStudent.student_id : 'new-student'}
-                    student={selectedStudent} 
-                    onSave={handleSaveStudent} 
-                    onCancel={() => { setIsAdding(false); setSelectedStudent(null); }} 
-                />
-            </Modal>
-            
-            {isImporting && <StudentImportModal onImport={handleImport} onClose={() => setIsImporting(false)} />}
-        </div>
+            {recordForPdf && selectedStudent && (
+                 <div style={{ position: 'absolute', left: '-9999px', top: 0 }} ref={printableRef}>
+                    <PrintableFollowUpRecord record={recordForPdf} student={selectedStudent} />
+                </div>
+            )}
+        </>
     );
 };
 
