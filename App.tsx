@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, NavLink } from 'react-router-dom';
 import DashboardPage from './pages/DashboardPage';
@@ -6,7 +7,8 @@ import StudentsPage from './pages/StudentsPage';
 import TransactionsPage from './pages/TransactionsPage';
 import FilingsPage from './pages/FilingsPage';
 import ReportsPage from './pages/ReportsPage';
-import { DashboardIcon, StudentsIcon, TransactionsIcon, FilingsIcon, ReportsIcon, MenuIcon, MoonIcon, SunIcon, LogoIcon, SearchIcon, BellIcon, ArrowDownIcon, LogoutIcon, CloseIcon, ResetIcon } from './components/Icons';
+import TasksPage from './pages/TasksPage';
+import { DashboardIcon, StudentsIcon, TransactionsIcon, FilingsIcon, ReportsIcon, TasksIcon, MenuIcon, MoonIcon, SunIcon, LogoIcon, SearchIcon, BellIcon, ArrowDownIcon, LogoutIcon, CloseIcon, ResetIcon } from './components/Icons';
 import { NotificationProvider } from './contexts/NotificationContext';
 import Toast from './components/Toast';
 import { api } from './services/api';
@@ -30,6 +32,7 @@ const App: React.FC = () => {
         { path: '/students', label: 'Students', icon: <StudentsIcon /> },
         { path: '/transactions', label: 'Transactions', icon: <TransactionsIcon /> },
         { path: '/filings', label: 'Filings', icon: <FilingsIcon /> },
+        { path: '/tasks', label: 'Tasks', icon: <TasksIcon /> },
         { path: '/reports', label: 'Reports', icon: <ReportsIcon /> },
     ];
 
@@ -159,6 +162,7 @@ const App: React.FC = () => {
                                     <Route path="/students" element={<StudentsPage />} />
                                     <Route path="/transactions" element={<TransactionsPage />} />
                                     <Route path="/filings" element={<FilingsPage />} />
+                                    <Route path="/tasks" element={<TasksPage />} />
                                     <Route path="/reports" element={<ReportsPage />} />
                                 </Routes>
                             </div>

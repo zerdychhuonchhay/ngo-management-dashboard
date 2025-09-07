@@ -2,14 +2,33 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
 import { Student, FollowUpRecord, Gender, StudentStatus, SponsorshipStatus, AcademicReport, WellbeingStatus, YesNo, RISK_FACTORS, ParentDetails, HealthStatus, InteractionStatus, TransportationType } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, DocumentAddIcon, ArrowUpIcon, ArrowDownIcon, EditIcon } from '../components/Icons';
+import { PlusIcon, DocumentAddIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, TrashIcon, UploadIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 import { SkeletonTable } from '../components/SkeletonLoader';
 
+// --- Helper Functions ---
+const calculateAge = (dob: string): number => {
+    if (!dob) return 0;
+    const birthDate = new Date(dob);
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+    }
+    return age;
+};
+
+const formatDateForInput = (dateStr?: string) => {
+    if (!dateStr) return '';
+    return new Date(dateStr).toISOString().split('T')[0];
+};
+
+// --- Reusable Components ---
 const DetailCard: React.FC<{ title: string; data: Record<string, any>; className?: string }> = ({ title, data, className }) => (
     <div className={`bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6 ${className}`}>
         <h3 className="text-xl font-semibold text-black dark:text-white mb-4 border-b border-stroke dark:border-strokedark pb-2">{title}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Object.entries(data).map(([key, value]) => (
                 <div key={key}>
                     <p className="text-sm text-body-color dark:text-gray-300 capitalize">{key.replace(/_/g, ' ')}</p>
@@ -34,503 +53,235 @@ const NarrativeDetailCard: React.FC<{ title: string; data: Record<string, any> }
     </div>
 );
 
-const FollowUpDetailModal: React.FC<{ record: FollowUpRecord, onClose: () => void }> = ({ record, onClose }) => {
-    const DetailItem: React.FC<{ label: string, value?: string | number | string[], note?: string, noteLabel?: string }> = ({ label, value, note, noteLabel }) => (
-        <div className="py-2">
-            <p className="text-sm text-body-color dark:text-gray-400">{label}</p>
-            <p className="font-medium text-black dark:text-white">{Array.isArray(value) ? value.join(', ') : (value || 'N/A')}</p>
-            {note && <p className="text-sm mt-1 pl-2 border-l-2 border-stroke dark:border-strokedark text-body-color dark:text-gray-300"><strong>{noteLabel || 'Notes'}:</strong> {note}</p>}
-        </div>
-    );
-
-    return (
-        <Modal isOpen={true} onClose={onClose} title={`Follow-Up Report: ${new Date(record.date_of_follow_up).toLocaleDateString()}`}>
-            <div className="space-y-6">
-                <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-                    <legend className="px-2 font-medium text-black dark:text-white">Client Information</legend>
-                    <div className="grid grid-cols-2 gap-4">
-                        <DetailItem label="Child's Name" value={record.child_name} />
-                        <DetailItem label="Current Age" value={record.child_current_age} />
-                        <DetailItem label="Location" value={record.location} />
-                        <DetailItem label="Parent/Guardian" value={record.parent_guardian} />
-                    </div>
-                </fieldset>
-
-                <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-                    <legend className="px-2 font-medium text-black dark:text-white">Well-being Progress</legend>
-                     <div className="grid grid-cols-2 gap-4">
-                        <DetailItem label="Physical Health" value={record.physical_health} note={record.physical_health_notes} />
-                        <DetailItem label="Social Interaction" value={record.social_interaction} note={record.social_interaction_notes} />
-                        <DetailItem label="Home Life" value={record.home_life} note={record.home_life_notes} />
-                        <DetailItem label="Drugs/Alcohol/Violence" value={record.drugs_alcohol_violence} note={record.drugs_alcohol_violence_notes} />
-                    </div>
-                </fieldset>
-                
-                 <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-                    <legend className="px-2 font-medium text-black dark:text-white">Risk Factors</legend>
-                    <DetailItem label="Identified Risks" value={record.risk_factors_list.length > 0 ? record.risk_factors_list : 'None'} note={record.risk_factors_details} noteLabel="Details"/>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                         <DetailItem label="Condition of Home" value={record.condition_of_home} note={record.condition_of_home_notes} />
-                         <DetailItem label="Current Work" value={record.current_work_details} />
-                         <DetailItem label="Mother Working" value={record.mother_working} />
-                         <DetailItem label="Father Working" value={record.father_working} />
-                    </div>
-                </fieldset>
-
-                <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-                    <legend className="px-2 font-medium text-black dark:text-white">Conclusion</legend>
-                    <div className="grid grid-cols-2 gap-4">
-                        <DetailItem label="Completed By" value={record.completed_by} />
-                        <DetailItem label="Date Completed" value={new Date(record.date_completed).toLocaleDateString()} />
-                        <DetailItem label="Reviewed By" value={record.reviewed_by} />
-                        <DetailItem label="Date Reviewed" value={new Date(record.date_reviewed).toLocaleDateString()} />
-                        <DetailItem label="Child Protection Concerns" value={record.child_protection_concerns} />
-                        <DetailItem label="Human Trafficking Risk" value={record.human_trafficking_risk} />
-                    </div>
-                </fieldset>
-
-                 <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-                    <legend className="px-2 font-medium text-black dark:text-white">Staff Notes</legend>
-                    <DetailItem label="General Notes" value={record.staff_notes} />
-                    <DetailItem label="Changes / Recommendations" value={record.changes_recommendations} />
-                </fieldset>
-            </div>
-        </Modal>
-    );
-};
-
-const CollapsibleSection: React.FC<{ title: string; id: string; isOpen: boolean; onToggle: () => void; children: React.ReactNode; }> = ({ title, id, isOpen, onToggle, children }) => (
-    <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm">
-        <h3 className="border-b border-stroke dark:border-strokedark">
-            <button type="button" onClick={onToggle} aria-expanded={isOpen} className="flex items-center justify-between w-full p-4 font-medium text-left text-black dark:text-white">
-                <span>{title}</span>
-                {isOpen ? <ArrowUpIcon /> : <ArrowDownIcon />}
-            </button>
-        </h3>
-        {isOpen && <div className="p-4 space-y-4">{children}</div>}
+const FormInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, ...props }) => (
+    <div>
+        <label htmlFor={props.id || props.name} className="block text-sm font-medium text-black dark:text-white mb-1">{label}</label>
+        <input {...props} className="w-full rounded border-[1.5px] border-stroke bg-gray-2 py-2 px-4 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary" />
     </div>
 );
 
-const StudentDetailView: React.FC<{ student: Student; onBack: () => void; onAddFollowUp: () => void; onAddAcademicReport: () => void; onEdit: () => void; }> = ({ student, onBack, onAddFollowUp, onAddAcademicReport, onEdit }) => {
-    const [viewingFollowUp, setViewingFollowUp] = useState<FollowUpRecord | null>(null);
-    const [openSection, setOpenSection] = useState<string | null>('key-info');
+const FormSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, children: React.ReactNode }> = ({ label, children, ...props }) => (
+     <div>
+        <label htmlFor={props.id || props.name} className="block text-sm font-medium text-black dark:text-white mb-1">{label}</label>
+        <select {...props} className="w-full rounded border-[1.5px] border-stroke bg-gray-2 py-2 px-4 font-medium outline-none transition focus:border-primary active:border-primary text-black dark:border-strokedark dark:bg-form-input dark:text-white dark:focus:border-primary">
+            {children}
+        </select>
+    </div>
+);
 
-    const handleToggleSection = (sectionId: string) => {
-        setOpenSection(openSection === sectionId ? null : sectionId);
-    };
+const FormTextArea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label: string }> = ({ label, ...props }) => (
+     <div>
+        <label htmlFor={props.id || props.name} className="block text-sm font-medium text-black dark:text-white mb-1">{label}</label>
+        <textarea {...props} className="w-full rounded border-[1.5px] border-stroke bg-gray-2 py-2 px-4 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary min-h-[100px]" />
+    </div>
+);
 
-    const narrativeData = {
-        ...(student.child_story && { "Child's Story / Reason for School": student.child_story }),
-        ...(student.other_notes && { 'Other Notes': student.other_notes }),
-        ...(student.child_responsibilities && { 'Child Responsibilities': student.child_responsibilities }),
-        ...(student.health_issues && { 'Health Issues': student.health_issues }),
-        ...(student.interaction_issues && { 'Interaction Issues': student.interaction_issues }),
-        ...(student.previous_schooling === YesNo.YES &&
-            (student.previous_schooling_details.when || student.previous_schooling_details.how_long || student.previous_schooling_details.where) &&
-            { 'Previous Schooling Details': `When: ${student.previous_schooling_details.when || 'N/A'}, How Long: ${student.previous_schooling_details.how_long || 'N/A'}, Where: ${student.previous_schooling_details.where || 'N/A'}` })
-    };
-    
-    return (
-        <div className="space-y-6">
-            <button onClick={onBack} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary hover:underline">
-                &larr; Back to Student List
-            </button>
-
-            <div className="bg-white dark:bg-box-dark p-6 rounded-lg border border-stroke dark:border-strokedark shadow-sm">
-                <div className="flex flex-col sm:flex-row items-center gap-6">
-                    <img src={student.profile_photo || 'https://i.pravatar.cc/150'} alt="Profile" className="w-32 h-32 rounded-full" />
-                    <div className="text-center sm:text-left flex-grow">
-                        <h2 className="text-3xl font-bold text-black dark:text-white">{student.first_name} {student.last_name}</h2>
-                        <p className="text-body-color dark:text-gray-300">{student.student_id}</p>
-                        <div className="mt-2 flex gap-2 justify-center sm:justify-start">
-                            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${student.student_status === StudentStatus.ACTIVE ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                                {student.student_status}
-                            </span>
-                            <span className={`px-3 py-1 text-sm font-semibold rounded-full ${student.sponsorship_status === SponsorshipStatus.SPONSORED ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'}`}>
-                                {student.sponsorship_status}
-                            </span>
-                        </div>
-                    </div>
-                    <button onClick={onEdit} className="flex-shrink-0 flex items-center bg-secondary/20 text-secondary px-4 py-2 rounded-lg hover:bg-secondary/30 transition-colors">
-                        <EditIcon /> <span className="ml-2">Edit Student</span>
-                    </button>
-                </div>
-            </div>
-            
-            {/* Desktop View: Grid */}
-            <div className="hidden lg:grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <DetailCard title="Personal Information" data={{ 'Application Date': new Date(student.application_date).toLocaleDateString(), date_of_birth: new Date(student.date_of_birth).toLocaleDateString(), gender: student.gender, city: student.city, 'Village/Slum': student.village_slum, home_location: student.home_location, has_birth_certificate: student.has_birth_certificate }} />
-                <DetailCard title="Family Information" data={{ guardian_name: student.guardian_name, guardian_contact_info: student.guardian_contact_info, 'Guardian if not parents': student.guardian_if_not_parents, siblings: student.siblings_count, 'Household Members': student.household_members_count, 'Annual Income': `$${student.annual_income}`, 'Parent Support Level': `${student.parent_support_level}/5` }} />
-                <DetailCard title="Father's Details" data={{ 'Living?': student.father_details.is_living, 'At Home?': student.father_details.is_at_home, 'Working?': student.father_details.is_working, Occupation: student.father_details.occupation, Skills: student.father_details.skills }} />
-                <DetailCard title="Mother's Details" data={{ 'Living?': student.mother_details.is_living, 'At Home?': student.mother_details.is_at_home, 'Working?': student.mother_details.is_working, Occupation: student.mother_details.occupation, Skills: student.mother_details.skills }} />
-                <DetailCard title="Education & Health" data={{ 'Currently in School?': student.currently_in_school, 'Previous Schooling?': student.previous_schooling, 'Grade Before EEP': student.grade_level_before_eep, 'Health Status': student.health_status, 'Interaction': student.interaction_with_others, 'Risk Level': `${student.risk_level}/5` }} />
-                <DetailCard title="Program & Sponsorship" data={{ school: student.school, current_grade: student.current_grade, eep_enroll_date: new Date(student.eep_enroll_date).toLocaleDateString(), sponsor_name: student.sponsor_name, has_housing_sponsorship: student.has_housing_sponsorship, has_sponsorship_contract: student.has_sponsorship_contract }} />
-            </div>
-
-            {/* Mobile View: Accordion */}
-            <div className="space-y-4 lg:hidden">
-                <CollapsibleSection title="Key Information" id="key-info" isOpen={openSection === 'key-info'} onToggle={() => handleToggleSection('key-info')}>
-                     <DetailCard title="" data={{ guardian_name: student.guardian_name, guardian_contact_info: student.guardian_contact_info, school: student.school, current_grade: student.current_grade, home_location: student.home_location }} className="!p-0 !border-none !shadow-none" />
-                </CollapsibleSection>
-                <CollapsibleSection title="Personal & Family Details" id="personal" isOpen={openSection === 'personal'} onToggle={() => handleToggleSection('personal')}>
-                     <DetailCard title="" data={{ 'Application Date': new Date(student.application_date).toLocaleDateString(), date_of_birth: new Date(student.date_of_birth).toLocaleDateString(), gender: student.gender, city: student.city, 'Village/Slum': student.village_slum, siblings: student.siblings_count, 'Household Members': student.household_members_count }} className="!p-0 !border-none !shadow-none" />
-                </CollapsibleSection>
-                 <CollapsibleSection title="Parent Details" id="parents" isOpen={openSection === 'parents'} onToggle={() => handleToggleSection('parents')}>
-                     <DetailCard title="Father's Details" data={{ 'Living?': student.father_details.is_living, 'At Home?': student.father_details.is_at_home, 'Working?': student.father_details.is_working, Occupation: student.father_details.occupation }} className="!p-0 !border-none !shadow-none" />
-                     <DetailCard title="Mother's Details" data={{ 'Living?': student.mother_details.is_living, 'At Home?': student.mother_details.is_at_home, 'Working?': student.mother_details.is_working, Occupation: student.mother_details.occupation }} className="!p-0 !border-none !shadow-none mt-4" />
-                </CollapsibleSection>
-                <CollapsibleSection title="Education & Health" id="education" isOpen={openSection === 'education'} onToggle={() => handleToggleSection('education')}>
-                     <DetailCard title="" data={{ 'Currently in School?': student.currently_in_school, 'Grade Before EEP': student.grade_level_before_eep, 'Health Status': student.health_status, 'Interaction': student.interaction_with_others, 'Risk Level': `${student.risk_level}/5` }} className="!p-0 !border-none !shadow-none" />
-                </CollapsibleSection>
-            </div>
-
-
-            {Object.keys(narrativeData).length > 0 && (
-                <NarrativeDetailCard 
-                    title="Narrative Information & Notes"
-                    data={narrativeData}
-                />
-            )}
-            
-            <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold text-black dark:text-white">Academic Reports</h3>
-                    <button onClick={onAddAcademicReport} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
-                        <DocumentAddIcon /> <span className="ml-2">Add Report</span>
-                    </button>
-                </div>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {student.academic_reports && student.academic_reports.length > 0 ? [...student.academic_reports].reverse().map(report => (
-                        <div key={report.id} className="bg-gray-2 dark:bg-box-dark-2 p-4 rounded-lg">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-semibold text-black dark:text-white">{report.report_period} - {report.grade_level}</p>
-                                    <p className="text-sm text-body-color dark:text-gray-300 mt-1">{report.subjects_and_grades}</p>
-                                    <p className="text-sm text-body-color dark:text-gray-300 mt-2">
-                                        <span className="font-medium text-black dark:text-white">Teacher Comments:</span> {report.teacher_comments}
-                                    </p>
-                                </div>
-                                <div className="text-right flex-shrink-0 ml-4">
-                                    <p className="font-bold text-lg text-black dark:text-white">{report.overall_average}%</p>
-                                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${report.pass_fail_status === 'Pass' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                                        {report.pass_fail_status}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    )) : <p className="text-body-color dark:text-gray-300 text-center py-4">No academic reports found.</p>}
-                </div>
-            </div>
-            
-            <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-6">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-semibold text-black dark:text-white">Follow-up Records</h3>
-                    <button onClick={onAddFollowUp} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
-                        <PlusIcon /> <span className="ml-2">Add Follow-up</span>
-                    </button>
-                </div>
-                <div className="space-y-4 max-h-96 overflow-y-auto">
-                    {student.follow_up_records && student.follow_up_records.length > 0 ? [...student.follow_up_records].reverse().map(record => (
-                        <div key={record.id} onClick={() => setViewingFollowUp(record)} className="bg-gray-2 dark:bg-box-dark-2 p-4 rounded-lg cursor-pointer hover:bg-gray-300 dark:hover:bg-box-dark">
-                            <p className="font-semibold text-black dark:text-white">Follow-up on: {new Date(record.date_of_follow_up).toLocaleDateString()}</p>
-                            <p className="text-sm text-body-color dark:text-gray-300 truncate">{record.staff_notes || 'No general notes'}</p>
-                            <p className="text-xs text-body-color dark:text-gray-300 mt-2">Completed By: {record.completed_by}</p>
-                        </div>
-                    )) : <p className="text-body-color dark:text-gray-300 text-center py-4">No follow-up records found.</p>}
-                </div>
-            </div>
-            {viewingFollowUp && <FollowUpDetailModal record={viewingFollowUp} onClose={() => setViewingFollowUp(null)} />}
-        </div>
-    );
-};
-
-type StudentFormData = Omit<Student, 'profile_photo' | 'academic_reports' | 'follow_up_records' | 'out_of_program_date'> & {
-    profile_photo?: File;
-};
-
-const FormStep: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-    <fieldset className="border border-stroke dark:border-strokedark p-4 rounded-md">
-        <legend className="px-2 font-medium text-black dark:text-white">{title}</legend>
-        <div className="space-y-4">
+const FormSection: React.FC<{ title: string, children: React.ReactNode; className?: string }> = ({ title, children, className }) => (
+    <div className="pt-4">
+        <h4 className="text-lg font-semibold text-black dark:text-white mb-3 border-b border-stroke dark:border-strokedark pb-2">{title}</h4>
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${className}`}>
             {children}
         </div>
-    </fieldset>
-);
-
-const ProgressBar: React.FC<{ current: number, total: number, labels: string[] }> = ({ current, total, labels }) => (
-    <div className="mb-6">
-        <div className="flex justify-between mb-1">
-            {labels.map((label, index) => (
-                <div key={index} className={`text-xs text-center w-1/${total} ${index + 1 <= current ? 'font-bold text-primary' : 'text-body-color'}`}>
-                    {label}
-                </div>
-            ))}
-        </div>
-        <div className="w-full bg-gray-2 rounded-full h-2.5 dark:bg-box-dark-2">
-            <div className="bg-primary h-2.5 rounded-full transition-all duration-300" style={{ width: `${((current -1) / (total-1)) * 100}%` }}></div>
-        </div>
     </div>
 );
 
+const FormSubSection: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+    <div className="md:col-span-2">
+        <h5 className="text-md font-medium text-black dark:text-white mb-2">{title}</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{children}</div>
+    </div>
+);
 
-const StudentForm: React.FC<{ onSave: (student: StudentFormData) => Promise<void>, onCancel: () => void, initialData?: Student | null }> = ({ onSave, onCancel, initialData }) => {
-    const isEdit = !!initialData;
-    const today = new Date().toISOString().split('T')[0];
-    const [step, setStep] = useState(1);
-    const totalSteps = 4;
-    const stepLabels = ["Identity", "Family", "Education & Health", "Program"];
+const YesNoNASelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }> = ({ label, ...props }) => (
+    <FormSelect label={label} {...props}>
+        {Object.values(YesNo).map(v => <option key={v} value={v}>{v}</option>)}
+    </FormSelect>
+);
+const WellbeingSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }> = ({ label, ...props }) => (
+    <FormSelect label={label} {...props}>
+        {Object.values(WellbeingStatus).map(v => <option key={v} value={v}>{v}</option>)}
+    </FormSelect>
+);
 
-    const getInitialFormData = useCallback((): StudentFormData => {
-        if (isEdit && initialData) {
-            const { academic_reports, follow_up_records, profile_photo, ...formData } = initialData;
-            return {
-                ...formData,
-                date_of_birth: new Date(initialData.date_of_birth).toISOString().split('T')[0],
-                eep_enroll_date: new Date(initialData.eep_enroll_date).toISOString().split('T')[0],
-                application_date: new Date(initialData.application_date).toISOString().split('T')[0],
-                profile_photo: undefined,
-            };
-        }
-        return {
-            student_id: '', first_name: '', last_name: '', date_of_birth: '', gender: Gender.MALE, school: '', current_grade: '',
-            eep_enroll_date: today, student_status: StudentStatus.PENDING_QUALIFICATION, sponsorship_status: SponsorshipStatus.UNSPONSORED,
-            has_housing_sponsorship: false, sponsor_name: '',
-            application_date: today, has_birth_certificate: false, siblings_count: 0, household_members_count: 0,
-            city: '', village_slum: '', guardian_name: '', guardian_contact_info: '', home_location: '',
+
+// --- Modals and Forms ---
+
+const StudentForm: React.FC<{ student?: Student | null; onSave: (data: any) => void; onCancel: () => void }> = ({ student, onSave, onCancel }) => {
+    const isEdit = !!student;
+    const [formData, setFormData] = useState(() => {
+        const initialData = {
+            student_id: '',
+            first_name: '',
+            last_name: '',
+            date_of_birth: '',
+            gender: Gender.OTHER,
+            profile_photo: undefined,
+            school: '',
+            current_grade: '',
+            eep_enroll_date: '',
+            student_status: StudentStatus.PENDING_QUALIFICATION,
+            sponsorship_status: SponsorshipStatus.UNSPONSORED,
+            has_housing_sponsorship: false,
+            sponsor_name: '',
+            application_date: '',
+            has_birth_certificate: false,
+            siblings_count: 0,
+            household_members_count: 0,
+            city: '',
+            village_slum: '',
+            guardian_name: '',
+            guardian_contact_info: '',
+            home_location: '',
             father_details: { is_living: YesNo.NA, is_at_home: YesNo.NA, is_working: YesNo.NA, occupation: '', skills: '' },
             mother_details: { is_living: YesNo.NA, is_at_home: YesNo.NA, is_working: YesNo.NA, occupation: '', skills: '' },
-            annual_income: 0, guardian_if_not_parents: '', parent_support_level: 3, closest_private_school: '',
-            currently_in_school: YesNo.NA, previous_schooling: YesNo.NA,
+            annual_income: 0,
+            guardian_if_not_parents: '',
+            parent_support_level: 3,
+            closest_private_school: '',
+            currently_in_school: YesNo.NA,
+            previous_schooling: YesNo.NA,
             previous_schooling_details: { when: '', how_long: '', where: '' },
-            grade_level_before_eep: '', child_responsibilities: '', health_status: HealthStatus.AVERAGE, health_issues: '',
-            interaction_with_others: InteractionStatus.AVERAGE, interaction_issues: '', child_story: '', other_notes: '',
-            risk_level: 3, transportation: TransportationType.WALKING, has_sponsorship_contract: false
+            grade_level_before_eep: '',
+            child_responsibilities: '',
+            health_status: HealthStatus.AVERAGE,
+            health_issues: '',
+            interaction_with_others: InteractionStatus.AVERAGE,
+            interaction_issues: '',
+            child_story: '',
+            other_notes: '',
+            risk_level: 3,
+            transportation: TransportationType.WALKING,
+            has_sponsorship_contract: false,
         };
-    }, [isEdit, initialData, today]);
 
-    const [formData, setFormData] = useState<StudentFormData>(getInitialFormData());
-    const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary disabled:bg-gray dark:disabled:bg-box-dark-2";
-    const labelClass = "block text-sm font-medium text-black dark:text-white mb-1";
-    const [isSaving, setIsSaving] = useState(false);
-
-    const nextStep = () => setStep(prev => Math.min(prev + 1, totalSteps));
-    const prevStep = () => setStep(prev => Math.max(prev - 1, 1));
+        if (isEdit && student) {
+            return {
+                ...initialData,
+                ...student,
+                date_of_birth: formatDateForInput(student.date_of_birth),
+                eep_enroll_date: formatDateForInput(student.eep_enroll_date),
+                application_date: formatDateForInput(student.application_date),
+                profile_photo: undefined, // Don't pre-fill file input
+            };
+        }
+        return initialData;
+    });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, type, value } = e.target;
+        const { name, value, type } = e.target;
         
         if (name.includes('.')) {
             const [parent, child] = name.split('.');
             setFormData(prev => ({
                 ...prev,
                 [parent]: {
-                    ...(prev as any)[parent],
+                    // @ts-ignore
+                    ...prev[parent],
                     [child]: value,
                 }
             }));
             return;
         }
 
-        if (type === 'file') {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            setFormData(prev => ({ ...prev, [name]: file || undefined }));
-        } else {
-            const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : type === 'number' ? parseFloat(value) : value;
-            setFormData(prev => ({ ...prev, [name]: val }));
+        // @ts-ignore
+        const isCheckbox = type === 'checkbox' && e.target.checked !== undefined;
+        // @ts-ignore
+        const val = isCheckbox ? e.target.checked : value;
+        
+        setFormData(prev => ({ ...prev, [name]: val }));
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            setFormData(prev => ({ ...prev, profile_photo: e.target.files![0] }));
         }
     };
     
-    const ParentDetailsForm: React.FC<{ type: 'father' | 'mother', data: ParentDetails }> = ({ type, data }) => (
-        <fieldset className="border border-stroke dark:border-strokedark p-3 rounded-md">
-            <legend className="px-2 text-sm font-medium text-black dark:text-white capitalize">{type}'s Details</legend>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-                <div><label className={labelClass}>Living?</label><select name={`${type}_details.is_living`} value={data.is_living} onChange={handleChange} className={formInputClass}>{Object.values(YesNo).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-                <div><label className={labelClass}>At Home?</label><select name={`${type}_details.is_at_home`} value={data.is_at_home} onChange={handleChange} className={formInputClass}>{Object.values(YesNo).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-                <div><label className={labelClass}>Working?</label><select name={`${type}_details.is_working`} value={data.is_working} onChange={handleChange} className={formInputClass}>{Object.values(YesNo).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-                 <input type="text" name={`${type}_details.occupation`} placeholder="Occupation" value={data.occupation} onChange={handleChange} className={formInputClass} />
-                 <input type="text" name={`${type}_details.skills`} placeholder="Skills" value={data.skills} onChange={handleChange} className={formInputClass} />
-            </div>
-        </fieldset>
-    );
-
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const confirmationMessage = isEdit 
-            ? 'Are you sure you want to save these changes?' 
-            : 'Are you sure you want to create this new student?';
-
-        if (window.confirm(confirmationMessage)) {
-            setIsSaving(true);
-            await onSave(formData);
-            setIsSaving(false);
-        }
+        onSave(formData);
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-             <ProgressBar current={step} total={totalSteps} labels={stepLabels} />
-             
-             {step === 1 && (
-                <FormStep title="Core Identity">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <input type="text" name="student_id" placeholder="Student ID" value={formData.student_id} onChange={handleChange} className={formInputClass} required disabled={isEdit} />
-                        <input type="text" name="first_name" placeholder="First Name" value={formData.first_name} onChange={handleChange} className={formInputClass} required />
-                        <input type="text" name="last_name" placeholder="Last Name" value={formData.last_name} onChange={handleChange} className={formInputClass} required />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                         <div><label className={labelClass}>Date of Birth</label><input type="date" name="date_of_birth" value={formData.date_of_birth} onChange={handleChange} className={formInputClass} required /></div>
-                        <select name="gender" value={formData.gender} onChange={handleChange} className={`${formInputClass} mt-7`}>{Object.values(Gender).map(g => <option key={g} value={g}>{g}</option>)}</select>
-                         <div><label className={labelClass}>Application Date</label><input type="date" name="application_date" value={formData.application_date} onChange={handleChange} className={formInputClass} required /></div>
-                    </div>
-                </FormStep>
-             )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <FormSection title="Personal Information">
+                <FormInput label="Student ID" name="student_id" value={formData.student_id} onChange={handleChange} required disabled={isEdit} />
+                <FormInput label="First Name" name="first_name" value={formData.first_name} onChange={handleChange} required />
+                <FormInput label="Last Name" name="last_name" value={formData.last_name} onChange={handleChange} required />
+                <FormInput label="Date of Birth" name="date_of_birth" type="date" value={formData.date_of_birth} onChange={handleChange} required />
+                <FormSelect label="Gender" name="gender" value={formData.gender} onChange={handleChange}>
+                    {Object.values(Gender).map(g => <option key={g} value={g}>{g}</option>)}
+                </FormSelect>
+                <FormInput label="Profile Photo" name="profile_photo" type="file" onChange={handleFileChange} accept="image/*" />
+            </FormSection>
 
-             {step === 2 && (
-                <FormStep title="Family & Location">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" name="city" placeholder="City" value={formData.city} onChange={handleChange} className={formInputClass} />
-                        <input type="text" name="village_slum" placeholder="Village / Slum" value={formData.village_slum} onChange={handleChange} className={formInputClass} />
-                     </div>
-                      <ParentDetailsForm type="father" data={formData.father_details} />
-                      <ParentDetailsForm type="mother" data={formData.mother_details} />
-                </FormStep>
-             )}
-             
-            {step === 3 && (
-                <FormStep title="Education & Health">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className={labelClass}>Currently in school?</label><select name="currently_in_school" value={formData.currently_in_school} onChange={handleChange} className={formInputClass}>{Object.values(YesNo).map(v=><option key={v} value={v}>{v}</option>)}</select></div>
-                        <div><label className={labelClass}>Previous schooling?</label><select name="previous_schooling" value={formData.previous_schooling} onChange={handleChange} className={formInputClass}>{Object.values(YesNo).map(v=><option key={v} value={v}>{v}</option>)}</select></div>
-                     </div>
-                     {formData.previous_schooling === YesNo.YES && (
-                        <div className="grid grid-cols-3 gap-4 border p-3 rounded-md">
-                            <input type="text" name="previous_schooling_details.when" placeholder="When?" value={formData.previous_schooling_details.when} onChange={handleChange} className={formInputClass} />
-                            <input type="text" name="previous_schooling_details.how_long" placeholder="How long?" value={formData.previous_schooling_details.how_long} onChange={handleChange} className={formInputClass} />
-                            <input type="text" name="previous_schooling_details.where" placeholder="Where?" value={formData.previous_schooling_details.where} onChange={handleChange} className={formInputClass} />
-                        </div>
-                     )}
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label className={labelClass}>Health Status</label><select name="health_status" value={formData.health_status} onChange={handleChange} className={formInputClass}>{Object.values(HealthStatus).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-                         <div><label className={labelClass}>Interaction with Others</label><select name="interaction_with_others" value={formData.interaction_with_others} onChange={handleChange} className={formInputClass}>{Object.values(InteractionStatus).map(v => <option key={v} value={v}>{v}</option>)}</select></div>
-                     </div>
-                     <textarea name="child_story" placeholder="Their Story / Why do they want to go to school?" value={formData.child_story} onChange={handleChange} className={`${formInputClass} min-h-[100px]`}></textarea>
-                </FormStep>
-            )}
+            <FormSection title="Program Details">
+                 <FormInput label="School" name="school" value={formData.school} onChange={handleChange} />
+                 <FormInput label="Current Grade" name="current_grade" value={formData.current_grade} onChange={handleChange} />
+                 <FormInput label="EEP Enroll Date" name="eep_enroll_date" type="date" value={formData.eep_enroll_date} onChange={handleChange} />
+                 <FormSelect label="Student Status" name="student_status" value={formData.student_status} onChange={handleChange}>
+                    {Object.values(StudentStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                 </FormSelect>
+                 <FormSelect label="Sponsorship Status" name="sponsorship_status" value={formData.sponsorship_status} onChange={handleChange}>
+                    {Object.values(SponsorshipStatus).map(s => <option key={s} value={s}>{s}</option>)}
+                 </FormSelect>
+                  <FormInput label="Sponsor Name" name="sponsor_name" value={formData.sponsor_name || ''} onChange={handleChange} />
+            </FormSection>
 
-            {step === 4 && (
-                <FormStep title="Program Details">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                         <input type="text" name="school" placeholder="School" value={formData.school} onChange={handleChange} className={formInputClass} required />
-                         <input type="text" name="current_grade" placeholder="Current Grade" value={formData.current_grade} onChange={handleChange} className={formInputClass} required />
-                         <div><label className={labelClass}>EEP Enroll Date</label><input type="date" name="eep_enroll_date" value={formData.eep_enroll_date} onChange={handleChange} className={formInputClass} required /></div>
-                         <select name="student_status" value={formData.student_status} onChange={handleChange} className={`${formInputClass} mt-7`}>{Object.values(StudentStatus).map(s => <option key={s} value={s}>{s}</option>)}</select>
-                    </div>
-                     <div className="pt-2 flex items-center gap-4">
-                        <label className="flex items-center gap-2 text-black dark:text-white"><input type="checkbox" name="has_birth_certificate" checked={formData.has_birth_certificate} onChange={handleChange} /> Has Birth Certificate?</label>
-                        <label className="flex items-center gap-2 text-black dark:text-white"><input type="checkbox" name="has_sponsorship_contract" checked={formData.has_sponsorship_contract} onChange={handleChange} /> Has Sponsorship Contract?</label>
-                    </div>
-                </FormStep>
-            )}
-            
-            <div className="flex justify-between items-center pt-4">
+            <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <div className="flex space-x-2">
-                    {step > 1 && (
-                         <button type="button" onClick={prevStep} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Back</button>
-                    )}
-                    {step < totalSteps ? (
-                        <button type="button" onClick={nextStep} className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Next</button>
-                    ) : (
-                        <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90 disabled:opacity-50" disabled={isSaving}>
-                            {isSaving ? 'Saving...' : (isEdit ? 'Update Student' : 'Save Student')}
-                        </button>
-                    )}
-                </div>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">{isEdit ? 'Update Student' : 'Save Student'}</button>
             </div>
         </form>
     );
 };
 
-type AcademicReportFormData = Omit<AcademicReport, 'id' | 'student_id'>;
 
-const AcademicReportForm: React.FC<{ onSave: (report: AcademicReportFormData) => Promise<void>; onCancel: () => void }> = ({ onSave, onCancel }) => {
-    const [formData, setFormData] = useState<AcademicReportFormData>({
+const AcademicReportForm: React.FC<{ studentId: string; onSave: (report: any) => void; onCancel: () => void }> = ({ studentId, onSave, onCancel }) => {
+    const [formData, setFormData] = useState({
         report_period: '',
         grade_level: '',
         subjects_and_grades: '',
         overall_average: 0,
         pass_fail_status: 'Pass',
-        teacher_comments: '',
+        teacher_comments: ''
     });
-    const [isSaving, setIsSaving] = useState(false);
-    const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary";
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: name === 'overall_average' ? parseFloat(value) : value }));
     };
-    
-    const handleSubmit = async (e: React.FormEvent) => {
+
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (window.confirm('Are you sure you want to save this academic report?')) {
-            setIsSaving(true);
-            await onSave(formData);
-            setIsSaving(false);
-        }
+        onSave(formData);
     };
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" name="report_period" placeholder="Report Period (e.g., Term 1 2024)" value={formData.report_period} onChange={handleChange} className={formInputClass} required />
-                <input type="text" name="grade_level" placeholder="Grade Level" value={formData.grade_level} onChange={handleChange} className={formInputClass} required />
-            </div>
-            <textarea name="subjects_and_grades" placeholder="Subjects and Grades (e.g., Math: A, Science: B+)" value={formData.subjects_and_grades} onChange={handleChange} className={`${formInputClass} min-h-[120px]`} required></textarea>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="number" step="0.1" name="overall_average" placeholder="Overall Average (%)" value={formData.overall_average} onChange={handleChange} className={formInputClass} required />
-                <select name="pass_fail_status" value={formData.pass_fail_status} onChange={handleChange} className={formInputClass} required>
-                    <option value="Pass">Pass</option>
-                    <option value="Fail">Fail</option>
-                </select>
-            </div>
-            <textarea name="teacher_comments" placeholder="Teacher Comments" value={formData.teacher_comments} onChange={handleChange} className={`${formInputClass} min-h-[120px]`} required></textarea>
+            <FormInput label="Report Period (e.g., Term 1 2024)" name="report_period" value={formData.report_period} onChange={handleChange} required />
+            <FormInput label="Grade Level" name="grade_level" value={formData.grade_level} onChange={handleChange} required />
+            <FormTextArea label="Subjects & Grades" name="subjects_and_grades" value={formData.subjects_and_grades} onChange={handleChange} placeholder="e.g., Math: A, Science: B+" />
+            <FormInput label="Overall Average" name="overall_average" type="number" step="0.1" value={formData.overall_average} onChange={handleChange} />
+            <FormSelect label="Pass/Fail Status" name="pass_fail_status" value={formData.pass_fail_status} onChange={handleChange}>
+                <option value="Pass">Pass</option>
+                <option value="Fail">Fail</option>
+            </FormSelect>
+            <FormTextArea label="Teacher Comments" name="teacher_comments" value={formData.teacher_comments} onChange={handleChange} />
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90 disabled:opacity-50" disabled={isSaving}>
-                    {isSaving ? 'Saving...' : 'Save Report'}
-                </button>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Save Report</button>
             </div>
         </form>
     );
 };
 
-
-type FollowUpFormData = Omit<FollowUpRecord, 'id' | 'student_id'>;
-
-const FollowUpForm: React.FC<{ student: Student; onSave: (record: FollowUpFormData) => Promise<void>; onCancel: () => void }> = ({ student, onSave, onCancel }) => {
-    const today = new Date().toISOString().split('T')[0];
-    const [step, setStep] = useState(1);
-    const totalSteps = 4;
-    const stepLabels = ["Client Info", "Well-being", "Risk Factors", "Conclusion"];
-
-    const calculateAge = (dob: string): number => {
-        const birthDate = new Date(dob);
-        const today = new Date();
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const m = today.getMonth() - birthDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-        }
-        return age;
-    };
-    
-    const [formData, setFormData] = useState<FollowUpFormData>({
+const FollowUpForm: React.FC<{ student: Student; onSave: (record: any) => void; onCancel: () => void }> = ({ student, onSave, onCancel }) => {
+    const [formData, setFormData] = useState<Omit<FollowUpRecord, 'id' | 'student_id'>>({
         child_name: `${student.first_name} ${student.last_name}`,
         child_current_age: calculateAge(student.date_of_birth),
-        date_of_follow_up: today,
-        location: student.home_location,
+        date_of_follow_up: formatDateForInput(new Date().toISOString()),
+        location: '',
         parent_guardian: student.guardian_name,
         physical_health: WellbeingStatus.NA,
         physical_health_notes: '',
@@ -549,183 +300,286 @@ const FollowUpForm: React.FC<{ student: Student; onSave: (record: FollowUpFormDa
         other_family_member_working: YesNo.NA,
         current_work_details: '',
         attending_church: YesNo.NA,
-        school_name: student.school,
-        grade_level: student.current_grade,
-        attendance: '',
-        subjects_grades: [],
-        learning_difficulties: YesNo.NA,
-        learning_difficulties_notes: '',
-        behaviour_in_class: WellbeingStatus.NA,
-        behaviour_in_class_notes: '',
-        peer_issues: YesNo.NA,
-        peer_issues_notes: '',
-        teacher_involvement: YesNo.NA,
-        teacher_involvement_notes: '',
-        transportation: WellbeingStatus.NA,
-        transportation_notes: '',
-        tutoring_participation: WellbeingStatus.NA,
-        tutoring_participation_notes: '',
         staff_notes: '',
         changes_recommendations: '',
-        child_protection_concerns: YesNo.NO,
-        human_trafficking_risk: YesNo.NO,
-        completed_by: 'Admin User',
-        date_completed: today,
+        child_protection_concerns: YesNo.NA,
+        human_trafficking_risk: YesNo.NA,
+        completed_by: '',
+        date_completed: formatDateForInput(new Date().toISOString()),
         reviewed_by: '',
-        date_reviewed: today,
+        date_reviewed: formatDateForInput(new Date().toISOString()),
     });
-    const [isSaving, setIsSaving] = useState(false);
-    const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary";
-    const labelClass = "block text-sm font-medium text-black dark:text-white mb-1";
-
-    const nextStep = () => setStep(prev => Math.min(prev + 1, totalSteps));
-    const prevStep = () => setStep(prev => Math.max(prev - 1, 1));
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value, type } = e.target;
-        const checked = (e.target as HTMLInputElement).checked;
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
 
-        if (name === "risk_factors_list") {
-            setFormData(prev => ({
-                ...prev,
-                risk_factors_list: checked ? [...prev.risk_factors_list, value] : prev.risk_factors_list.filter(item => item !== value)
-            }));
-        } else {
-             setFormData(prev => ({ ...prev, [name]: type === 'number' ? parseInt(value) : value }));
-        }
+    const handleRiskToggle = (risk: string) => {
+        setFormData(prev => {
+            const currentRisks = prev.risk_factors_list;
+            if (currentRisks.includes(risk)) {
+                return { ...prev, risk_factors_list: currentRisks.filter(r => r !== risk) };
+            } else {
+                return { ...prev, risk_factors_list: [...currentRisks, risk] };
+            }
+        });
     };
     
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (window.confirm('Are you sure you want to save this follow-up record?')) {
-            setIsSaving(true);
-            await onSave(formData);
-            setIsSaving(false);
-        }
+        onSave(formData);
     };
-    
-    const WellbeingSelect: React.FC<{name: keyof FollowUpFormData, label: string, noteName: keyof FollowUpFormData, noteLabel: string}> = ({name, label, noteName, noteLabel}) => (
-         <div>
-            <label className={labelClass}>{label}</label>
-            <select name={name} value={formData[name] as string} onChange={handleChange} className={formInputClass}>
-                {Object.values(WellbeingStatus).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-             {(formData[name] === WellbeingStatus.AVERAGE || formData[name] === WellbeingStatus.POOR) && (
-                <textarea name={noteName} value={formData[noteName] as string} onChange={handleChange} placeholder={noteLabel} className={`${formInputClass} mt-2`}></textarea>
-             )}
-        </div>
-    );
-    
-    const YesNoSelect: React.FC<{name: keyof FollowUpFormData, label: string, noteName: keyof FollowUpFormData, noteLabel: string}> = ({name, label, noteName, noteLabel}) => (
-        <div>
-            <label className={labelClass}>{label}</label>
-            <select name={name} value={formData[name] as string} onChange={handleChange} className={formInputClass}>
-                {Object.values(YesNo).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {formData[name] === YesNo.YES && (
-                 <textarea name={noteName} value={formData[noteName] as string} onChange={handleChange} placeholder={noteLabel} className={`${formInputClass} mt-2`}></textarea>
-            )}
-        </div>
-    );
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
-            <ProgressBar current={step} total={totalSteps} labels={stepLabels} />
+        <form onSubmit={handleSubmit} className="space-y-4">
+            <FormSection title="Section 1: Client Information">
+                <FormInput label="Child's Name" name="child_name" value={formData.child_name} onChange={handleChange} disabled />
+                <FormInput label="Child's Current Age" name="child_current_age" type="number" value={formData.child_current_age} onChange={handleChange} disabled />
+                <FormInput label="Date of Follow Up" name="date_of_follow_up" type="date" value={formData.date_of_follow_up} onChange={handleChange} required />
+                <FormInput label="Location" name="location" value={formData.location} onChange={handleChange} required />
+                <FormInput label="Parent/Guardian" name="parent_guardian" value={formData.parent_guardian} onChange={handleChange} />
+            </FormSection>
+
+            <FormSection title="Section 2: Well-being Progress">
+                <FormSubSection title="Well-being">
+                    <WellbeingSelect label="Physical Health" name="physical_health" value={formData.physical_health} onChange={handleChange} />
+                    {(formData.physical_health === WellbeingStatus.AVERAGE || formData.physical_health === WellbeingStatus.POOR) && <FormTextArea label="Notes" name="physical_health_notes" value={formData.physical_health_notes} onChange={handleChange} />}
+                    <WellbeingSelect label="Social Interaction" name="social_interaction" value={formData.social_interaction} onChange={handleChange} />
+                    {(formData.social_interaction === WellbeingStatus.AVERAGE || formData.social_interaction === WellbeingStatus.POOR) && <FormTextArea label="Notes" name="social_interaction_notes" value={formData.social_interaction_notes} onChange={handleChange} />}
+                    <WellbeingSelect label="Home Life" name="home_life" value={formData.home_life} onChange={handleChange} />
+                    {(formData.home_life === WellbeingStatus.AVERAGE || formData.home_life === WellbeingStatus.POOR) && <FormTextArea label="Notes" name="home_life_notes" value={formData.home_life_notes} onChange={handleChange} />}
+                    <YesNoNASelect label="Drugs/Alcohol/Violence" name="drugs_alcohol_violence" value={formData.drugs_alcohol_violence} onChange={handleChange} />
+                    {formData.drugs_alcohol_violence === YesNo.YES && <FormTextArea label="Notes" name="drugs_alcohol_violence_notes" value={formData.drugs_alcohol_violence_notes} onChange={handleChange} />}
+                </FormSubSection>
+            </FormSection>
             
-            {step === 1 && (
-                <FormStep title="Client Information">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input type="text" name="child_name" value={formData.child_name} onChange={handleChange} className={formInputClass} required disabled />
-                        <input type="number" name="child_current_age" placeholder="Current Age" value={formData.child_current_age} onChange={handleChange} className={formInputClass} required />
-                        <input type="date" name="date_of_follow_up" value={formData.date_of_follow_up} onChange={handleChange} className={formInputClass} required />
-                        <input type="text" name="location" value={formData.location} onChange={handleChange} className={formInputClass} required />
-                        <div className="md:col-span-2">
-                            <input type="text" name="parent_guardian" placeholder="Parent/Guardian present" value={formData.parent_guardian} onChange={handleChange} className={formInputClass} required />
-                        </div>
-                    </div>
-                </FormStep>
-            )}
-
-            {step === 2 && (
-                <FormStep title="Well-being Progress">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <WellbeingSelect name="physical_health" label="Physical Health" noteName="physical_health_notes" noteLabel="Main problem and how we can help..." />
-                        <WellbeingSelect name="social_interaction" label="Social Interaction" noteName="social_interaction_notes" noteLabel="Main problem and how we can help..." />
-                        <WellbeingSelect name="home_life" label="Home Life" noteName="home_life_notes" noteLabel="Main problem and how we can help..." />
-                        <YesNoSelect name="drugs_alcohol_violence" label="Drugs, Alcohol, or Violence?" noteName="drugs_alcohol_violence_notes" noteLabel="What evidence you learned about..." />
-                    </div>
-                </FormStep>
-            )}
-
-            {step === 3 && (
-                <FormStep title="Risk Factors & Staff Notes">
-                    <label className={labelClass}>Current Risk Factors (Select all that apply)</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-gray-2 dark:bg-box-dark-2 rounded-md border border-stroke dark:border-strokedark">
+            <FormSection title="Section 2a: Risk Factors">
+                <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-black dark:text-white mb-2">Current Risk Factors (Select all that apply)</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-gray-2 dark:bg-box-dark-2 rounded-lg">
                         {RISK_FACTORS.map(risk => (
-                            <label key={risk} className="flex items-center gap-2 text-sm text-black dark:text-white p-2 rounded-md hover:bg-gray-300 dark:hover:bg-box-dark transition-colors cursor-pointer">
-                                <input type="checkbox" name="risk_factors_list" value={risk} checked={formData.risk_factors_list.includes(risk)} onChange={handleChange} />
-                                {risk}
+                            <label key={risk} className="flex items-center space-x-2 text-sm text-black dark:text-white">
+                                <input type="checkbox" checked={formData.risk_factors_list.includes(risk)} onChange={() => handleRiskToggle(risk)} className="form-checkbox h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" />
+                                <span>{risk}</span>
                             </label>
                         ))}
                     </div>
-                    <textarea name="risk_factors_details" value={formData.risk_factors_details} onChange={handleChange} placeholder="Share details for ALL selections chosen above." className={`${formInputClass} mt-4`}></textarea>
-                    <textarea name="staff_notes" placeholder="Staff Notes - Please write any information you learned that is not included in this form." value={formData.staff_notes} onChange={handleChange} className={`${formInputClass} min-h-[100px]`}></textarea>
-                </FormStep>
-            )}
-            
-            {step === 4 && (
-                 <FormStep title="Conclusion">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className={labelClass}>Child Protection Concerns?</label>
-                            <select name="child_protection_concerns" value={formData.child_protection_concerns} onChange={handleChange} className={formInputClass}>
-                                {Object.values(YesNo).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                         <div>
-                            <label className={labelClass}>Increased Risk of Human Trafficking?</label>
-                            <select name="human_trafficking_risk" value={formData.human_trafficking_risk} onChange={handleChange} className={formInputClass}>
-                                {Object.values(YesNo).map(s => <option key={s} value={s}>{s}</option>)}
-                            </select>
-                        </div>
-                         <input type="text" name="completed_by" placeholder="Completed By" value={formData.completed_by} onChange={handleChange} className={formInputClass} required />
-                         <input type="text" name="reviewed_by" placeholder="Reviewed By" value={formData.reviewed_by} onChange={handleChange} className={formInputClass} />
-                     </div>
-                </FormStep>
-            )}
-
-
-            <div className="flex justify-between items-center pt-4">
-                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <div className="flex space-x-2">
-                    {step > 1 && (
-                         <button type="button" onClick={prevStep} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Back</button>
-                    )}
-                    {step < totalSteps ? (
-                        <button type="button" onClick={nextStep} className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Next</button>
-                    ) : (
-                        <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90 disabled:opacity-50" disabled={isSaving}>
-                            {isSaving ? 'Saving...' : 'Save Record'}
-                        </button>
-                    )}
                 </div>
+                <FormTextArea label="Details for selections above" name="risk_factors_details" value={formData.risk_factors_details} onChange={handleChange} className="md:col-span-2" />
+                 <WellbeingSelect label="Condition of Home" name="condition_of_home" value={formData.condition_of_home} onChange={handleChange} />
+                 {(formData.condition_of_home === WellbeingStatus.AVERAGE || formData.condition_of_home === WellbeingStatus.POOR) && <FormTextArea label="Notes" name="condition_of_home_notes" value={formData.condition_of_home_notes} onChange={handleChange} />}
+                 <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <YesNoNASelect label="Mother Working?" name="mother_working" value={formData.mother_working} onChange={handleChange} />
+                    <YesNoNASelect label="Father Working?" name="father_working" value={formData.father_working} onChange={handleChange} />
+                    <YesNoNASelect label="Other Family Member Working?" name="other_family_member_working" value={formData.other_family_member_working} onChange={handleChange} />
+                 </div>
+                 <FormTextArea label="Current Work Details" name="current_work_details" value={formData.current_work_details} onChange={handleChange} className="md:col-span-2" />
+                 <YesNoNASelect label="Attending Church/House of Prayer?" name="attending_church" value={formData.attending_church} onChange={handleChange} />
+            </FormSection>
+
+            <FormSection title="Section 4: EEP Staff Notes">
+                <FormTextArea label="Notes" name="staff_notes" value={formData.staff_notes} onChange={handleChange} className="md:col-span-2" />
+                <FormTextArea label="Changes/Recommendations" name="changes_recommendations" value={formData.changes_recommendations} onChange={handleChange} className="md:col-span-2" />
+            </FormSection>
+
+            <FormSection title="Section 5: Conclusion">
+                <YesNoNASelect label="Child Protection Concerns?" name="child_protection_concerns" value={formData.child_protection_concerns} onChange={handleChange} />
+                <YesNoNASelect label="Increased Human Trafficking Risk?" name="human_trafficking_risk" value={formData.human_trafficking_risk} onChange={handleChange} />
+            </FormSection>
+
+            <FormSection title="Completion Details">
+                <FormInput label="Completed By" name="completed_by" value={formData.completed_by} onChange={handleChange} required />
+                <FormInput label="Date Completed" name="date_completed" type="date" value={formData.date_completed} onChange={handleChange} required />
+            </FormSection>
+
+            <FormSection title="Administrator Review">
+                <p className="md:col-span-2 text-sm text-body-color dark:text-gray-400">This section is to be completed by an administrator upon review.</p>
+                <FormInput label="Reviewed By" name="reviewed_by" value={formData.reviewed_by} onChange={handleChange} />
+                <FormInput label="Date Reviewed" name="date_reviewed" type="date" value={formData.date_reviewed} onChange={handleChange} />
+            </FormSection>
+
+            <div className="flex justify-end space-x-2 pt-4">
+                <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Save Record</button>
             </div>
         </form>
     );
 };
 
+const StudentImportModal: React.FC<{ onImport: (students: Partial<Student>[]) => void; onClose: () => void; }> = ({ onImport, onClose }) => {
+    const [step, setStep] = useState(1);
+    const [file, setFile] = useState<File | null>(null);
+    const [headers, setHeaders] = useState<string[]>([]);
+    const [data, setData] = useState<any[]>([]);
+    const [mapping, setMapping] = useState<Record<string, string>>({});
+    const { showToast } = useNotification();
+    
+     const studentFields: (keyof Student)[] = [
+        'student_id', 'first_name', 'last_name', 'date_of_birth', 'gender', 'school',
+        'current_grade', 'eep_enroll_date', 'student_status', 'sponsorship_status',
+        'city', 'village_slum', 'guardian_name'
+    ];
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const selectedFile = e.target.files[0];
+            if (selectedFile.type.includes('spreadsheet') || selectedFile.type.includes('csv') || selectedFile.name.endsWith('.xls') || selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.csv')) {
+                setFile(selectedFile);
+            } else {
+                showToast('Please upload a valid Excel or CSV file.', 'error');
+            }
+        }
+    };
+    
+    const parseFile = useCallback(() => {
+        if (!file) return;
+
+        const loadXLSX = () => {
+             if ((window as any).XLSX) {
+                readFile();
+            } else {
+                const script = document.createElement('script');
+                script.src = "https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js";
+                script.onload = readFile;
+                document.head.appendChild(script);
+            }
+        }
+
+        const readFile = () => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const fileData = new Uint8Array(e.target!.result as ArrayBuffer);
+                    const workbook = (window as any).XLSX.read(fileData, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    const jsonData = (window as any).XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    if (!jsonData || jsonData.length === 0 || !Array.isArray(jsonData[0])) {
+                        showToast('The uploaded file is empty or invalid.', 'error');
+                        return;
+                    }
+
+                    const fileHeaders = (jsonData[0] as any[]).map(String);
+                    const fileRows = jsonData.slice(1).map(row => {
+                        const rowData: Record<string, any> = {};
+                        fileHeaders.forEach((header, index) => {
+                            rowData[header] = (row as any[])[index];
+                        });
+                        return rowData;
+                    });
+
+                    setHeaders(fileHeaders);
+                    setData(fileRows);
+
+                    const newMapping: Record<string, string> = {};
+                    fileHeaders.forEach(header => {
+                        const cleanHeader = header.toLowerCase().replace(/[\s_]/g, '');
+                        const matchedField = studentFields.find(sf => cleanHeader.includes(sf.replace(/_/g, '')));
+                        if (matchedField) {
+                            newMapping[header] = matchedField;
+                        }
+                    });
+                    setMapping(newMapping);
+
+                    setStep(2);
+                } catch(err) {
+                    showToast('Error parsing the file. Please ensure it is a valid format.', 'error');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        };
+        
+        loadXLSX();
+    }, [file, showToast]);
+    
+    const handleMappingChange = (header: string, field: string) => {
+        setMapping(prev => ({ ...prev, [header]: field }));
+    };
+
+    const mappedData = useMemo(() => {
+        return data.map(row => {
+            const newRow: Partial<Student> = {};
+            Object.keys(mapping).forEach(header => {
+                if (mapping[header] && row[header] !== undefined) {
+                    // @ts-ignore
+                    newRow[mapping[header]] = row[header];
+                }
+            });
+            return newRow;
+        }).filter(row => row.student_id);
+    }, [data, mapping]);
+    
+    const handleFinalImport = () => {
+        if(mappedData.length > 0) {
+            onImport(mappedData);
+        } else {
+            showToast('No valid student data to import after mapping.', 'error');
+        }
+    };
+    
+    return (
+        <Modal isOpen={true} onClose={onClose} title="Import Students">
+            {step === 1 && (
+                <div>
+                    <h3 className="font-semibold text-lg mb-2">Step 1: Upload File</h3>
+                    <p className="text-body-color mb-4">Select an Excel (.xlsx, .xls) or CSV (.csv) file to import.</p>
+                    <input type="file" onChange={handleFileChange} accept=".xlsx, .xls, .csv" className="w-full rounded border-[1.5px] border-stroke bg-gray-2 p-3 font-medium outline-none transition focus:border-primary text-black dark:border-strokedark dark:bg-form-input dark:text-white" />
+                    <div className="flex justify-end mt-4">
+                        <button onClick={parseFile} disabled={!file} className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 disabled:opacity-50">Next</button>
+                    </div>
+                </div>
+            )}
+            {step === 2 && (
+                <div>
+                    <h3 className="font-semibold text-lg mb-2">Step 2: Map Columns</h3>
+                    <p className="text-body-color mb-4">Match the columns from your file to the student fields in the system.</p>
+                    <div className="grid grid-cols-2 gap-4 max-h-80 overflow-y-auto p-2 bg-gray-2 dark:bg-box-dark-2 rounded">
+                        {headers.map(header => (
+                            <div key={header} className="flex items-center gap-2">
+                                <span className="font-medium text-black dark:text-white flex-1 truncate" title={header}>{header}</span>
+                                <select value={mapping[header] || ''} onChange={e => handleMappingChange(header, e.target.value)} className="rounded border border-stroke bg-white py-2 px-3 text-black dark:border-strokedark dark:bg-form-input dark:text-white">
+                                    <option value="">-- Ignore --</option>
+                                    {studentFields.map(field => <option key={field} value={field}>{field.replace(/_/g, ' ')}</option>)}
+                                </select>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-between mt-4">
+                        <button onClick={() => setStep(1)} className="px-4 py-2 bg-gray dark:bg-box-dark-2 rounded-lg hover:opacity-90">Back</button>
+                        <button onClick={() => setStep(3)} className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90">Next</button>
+                    </div>
+                </div>
+            )}
+            {step === 3 && (
+                <div>
+                    <h3 className="font-semibold text-lg mb-2">Step 3: Review and Import</h3>
+                    <p className="text-body-color mb-4">Review the data to be imported. Existing student IDs will be skipped.</p>
+                    <p className="font-semibold mb-2">{mappedData.length} students will be imported.</p>
+                    <div className="flex justify-between mt-4">
+                        <button onClick={() => setStep(2)} className="px-4 py-2 bg-gray dark:bg-box-dark-2 rounded-lg hover:opacity-90">Back</button>
+                        <button onClick={handleFinalImport} className="px-4 py-2 bg-success text-white rounded-lg hover:opacity-90">Confirm & Import</button>
+                    </div>
+                </div>
+            )}
+        </Modal>
+    );
+};
+
+
+// --- Main Page Component ---
 const StudentsPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-    const [isAddingStudent, setIsAddingStudent] = useState(false);
-    const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-    const [isAddingFollowUp, setIsAddingFollowUp] = useState(false);
-    const [isAddingAcademicReport, setIsAddingAcademicReport] = useState(false);
+    const [isAdding, setIsAdding] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
+    const [modal, setModal] = useState<'add_report' | 'add_follow_up' | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [sortConfig, setSortConfig] = useState<{ key: keyof Student; order: 'asc' | 'desc' } | null>(null);
+    const [sortConfig, setSortConfig] = useState<{ key: keyof Student | 'age'; order: 'asc' | 'desc' } | null>({ key: 'first_name', order: 'asc' });
     const { showToast } = useNotification();
+    const [openFollowUpId, setOpenFollowUpId] = useState<string | null>(null);
 
     const fetchStudents = useCallback(async () => {
         setLoading(true);
@@ -734,7 +588,7 @@ const StudentsPage: React.FC = () => {
             setStudents(data);
         } catch (error) {
             console.error("Failed to fetch students", error);
-            showToast('Failed to load students.', 'error');
+            showToast('Failed to load student data.', 'error');
         } finally {
             setLoading(false);
         }
@@ -743,8 +597,99 @@ const StudentsPage: React.FC = () => {
     useEffect(() => {
         fetchStudents();
     }, [fetchStudents]);
+    
+    const handleSaveStudent = async (studentData: any) => {
+        try {
+            if (selectedStudent) {
+                await api.updateStudent({ ...studentData, student_id: selectedStudent.student_id });
+                showToast('Student updated successfully!', 'success');
+            } else {
+                await api.addStudent(studentData);
+                showToast('Student added successfully!', 'success');
+            }
+            setIsAdding(false);
+            setSelectedStudent(null);
+            fetchStudents();
+        } catch (error: any) {
+            showToast(error.message || 'Failed to save student.', 'error');
+        }
+    };
+    
+    const handleDeleteStudent = async (studentId: string) => {
+        if(window.confirm('Are you sure you want to delete this student? This will also remove all associated records.')) {
+            try {
+                await api.deleteStudent(studentId);
+                showToast('Student deleted.', 'success');
+                setSelectedStudent(null);
+                fetchStudents();
+            } catch (error: any) {
+                showToast(error.message || 'Failed to delete student.', 'error');
+            }
+        }
+    };
+    
+    const handleSaveAcademicReport = async (reportData: any) => {
+        if (!selectedStudent) return;
+        try {
+            await api.addAcademicReport(selectedStudent.student_id, reportData);
+            showToast('Academic report added!', 'success');
+            setModal(null);
+            const updatedStudent = await api.getStudentById(selectedStudent.student_id);
+            if (updatedStudent) setSelectedStudent(updatedStudent);
+        } catch (error) {
+            showToast('Failed to add report.', 'error');
+        }
+    };
 
-    const handleSort = (key: keyof Student) => {
+    const handleSaveFollowUp = async (recordData: any) => {
+        if (!selectedStudent) return;
+        try {
+            await api.addFollowUpRecord(selectedStudent.student_id, recordData);
+            showToast('Follow-up record added!', 'success');
+            setModal(null);
+            const updatedStudent = await api.getStudentById(selectedStudent.student_id);
+            if (updatedStudent) setSelectedStudent(updatedStudent);
+        } catch (error) {
+            showToast('Failed to add record.', 'error');
+        }
+    };
+
+    const handleImport = async (newStudents: Partial<Student>[]) => {
+        try {
+            const result = await api.addBulkStudents(newStudents);
+            showToast(`${result.importedCount} students imported, ${result.skippedCount} skipped.`, 'success');
+            setIsImporting(false);
+            fetchStudents();
+        } catch (error) {
+             showToast('An error occurred during import.', 'error');
+        }
+    };
+    
+    const sortedAndFilteredStudents = useMemo(() => {
+        let filtered = students.filter(s =>
+            `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+        
+        if (sortConfig) {
+            filtered.sort((a, b) => {
+                const aVal = sortConfig.key === 'age' ? calculateAge(a.date_of_birth) : a[sortConfig.key as keyof Student];
+                const bVal = sortConfig.key === 'age' ? calculateAge(b.date_of_birth) : b[sortConfig.key as keyof Student];
+
+                if (typeof aVal === 'number' && typeof bVal === 'number') {
+                    return (aVal - bVal) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                
+                if (String(aVal).localeCompare(String(bVal)) !== 0) {
+                     return String(aVal).localeCompare(String(bVal)) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                return 0;
+            });
+        }
+        return filtered;
+    }, [students, searchTerm, sortConfig]);
+    
+    const handleSort = (key: keyof Student | 'age') => {
         let order: 'asc' | 'desc' = 'asc';
         if (sortConfig && sortConfig.key === key && sortConfig.order === 'asc') {
             order = 'desc';
@@ -752,200 +697,244 @@ const StudentsPage: React.FC = () => {
         setSortConfig({ key, order });
     };
 
-    const sortedAndFilteredStudents = useMemo(() => {
-        const filtered = students.filter(s =>
-            `${s.first_name} ${s.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            s.student_id.toLowerCase().includes(searchTerm.toLowerCase())
+    const FollowUpRecordView: React.FC<{ record: FollowUpRecord }> = ({ record }) => {
+        const InfoPair: React.FC<{ label: string; value?: string | number | null; children?: React.ReactNode }> = ({ label, value, children }) => (
+            <div>
+                <p className="text-sm text-body-color dark:text-gray-300">{label}</p>
+                <div className="font-medium text-black dark:text-white">{children || value || 'N/A'}</div>
+            </div>
         );
 
-        if (sortConfig !== null) {
-            filtered.sort((a, b) => {
-                const aVal = a[sortConfig.key];
-                const bVal = b[sortConfig.key];
-                if (aVal < bVal) {
-                    return sortConfig.order === 'asc' ? -1 : 1;
-                }
-                if (aVal > bVal) {
-                    return sortConfig.order === 'asc' ? 1 : -1;
-                }
-                // Secondary sort by last name if first names are equal
-                if (sortConfig.key === 'first_name') {
-                    return a.last_name.localeCompare(b.last_name);
-                }
-                return 0;
-            });
-        }
+        const Section: React.FC<{ title: string; children: React.ReactNode; hasData: boolean }> = ({ title, children, hasData }) => (
+            <div className="bg-white dark:bg-box-dark rounded-lg border border-stroke dark:border-strokedark shadow-sm p-4">
+                <h4 className="text-md font-semibold text-black dark:text-white mb-3 border-b border-stroke dark:border-strokedark pb-2">{title}</h4>
+                {hasData ? <div className="space-y-3">{children}</div> : <p className="text-body-color dark:text-gray-400 italic">Lack of information?</p>}
+            </div>
+        );
+
+        const hasWellbeingData = !!(record.physical_health !== WellbeingStatus.NA || record.physical_health_notes || record.social_interaction !== WellbeingStatus.NA || record.social_interaction_notes || record.home_life !== WellbeingStatus.NA || record.home_life_notes || record.drugs_alcohol_violence !== YesNo.NA || record.drugs_alcohol_violence_notes);
+        const hasRiskData = !!(record.risk_factors_list.length > 0 || record.risk_factors_details || record.condition_of_home !== WellbeingStatus.NA || record.condition_of_home_notes || record.mother_working !== YesNo.NA || record.father_working !== YesNo.NA || record.other_family_member_working !== YesNo.NA || record.current_work_details || record.attending_church !== YesNo.NA);
+        const hasStaffNotesData = !!(record.staff_notes || record.changes_recommendations);
         
-        return filtered;
-    }, [students, searchTerm, sortConfig]);
-
-    const handleSaveStudent = async (studentData: StudentFormData) => {
-        try {
-            await api.addStudent(studentData);
-            setIsAddingStudent(false);
-            showToast('Student added successfully!', 'success');
-            fetchStudents();
-        } catch (error: any) {
-            console.error("Failed to add student", error);
-            showToast(error.message || 'Failed to add student.', 'error');
-        }
-    };
-    
-    const handleUpdateStudent = async (studentData: StudentFormData) => {
-        if (!editingStudent) return;
-        try {
-            const updated = await api.updateStudent({
-                ...studentData,
-                student_id: editingStudent.student_id,
-            });
-            setEditingStudent(null);
-            setSelectedStudent(updated);
-            showToast('Student updated successfully!', 'success');
-            fetchStudents();
-        } catch (error: any) {
-            console.error("Failed to update student", error);
-            showToast(error.message || 'Failed to update student.', 'error');
-        }
-    };
-    
-    const handleSaveAcademicReport = async (reportData: AcademicReportFormData) => {
-        if (selectedStudent) {
-            try {
-                await api.addAcademicReport(selectedStudent.student_id, reportData);
-                setIsAddingAcademicReport(false);
-                const updatedStudent = await api.getStudentById(selectedStudent.student_id);
-                setSelectedStudent(updatedStudent || null);
-                showToast('Academic report added.', 'success');
-            } catch (error) {
-                console.error('Failed to add academic report', error);
-                showToast('Failed to add academic report.', 'error');
-            }
-        }
-    };
-
-    const handleSaveFollowUp = async (recordData: Omit<FollowUpRecord, 'id' | 'student_id'>) => {
-        if (selectedStudent) {
-            try {
-                await api.addFollowUpRecord(selectedStudent.student_id, recordData);
-                setIsAddingFollowUp(false);
-                const updatedStudent = await api.getStudentById(selectedStudent.student_id);
-                setSelectedStudent(updatedStudent || null);
-                showToast('Follow-up record added.', 'success');
-            } catch (error) {
-                console.error('Failed to add follow up', error);
-                showToast('Failed to add follow-up record.', 'error');
-            }
-        }
-    };
-
-    if (loading) return <SkeletonTable rows={5} cols={4} />;
-
-    if (selectedStudent) {
         return (
-            <>
-                <StudentDetailView
-                    student={selectedStudent}
-                    onBack={() => setSelectedStudent(null)}
-                    onAddFollowUp={() => setIsAddingFollowUp(true)}
-                    onAddAcademicReport={() => setIsAddingAcademicReport(true)}
-                    onEdit={() => setEditingStudent(selectedStudent)}
-                />
-                <Modal
-                    isOpen={isAddingFollowUp}
-                    onClose={() => setIsAddingFollowUp(false)}
-                    title={`New Follow-up for ${selectedStudent.first_name}`}
-                >
-                   <FollowUpForm student={selectedStudent} onSave={handleSaveFollowUp} onCancel={() => setIsAddingFollowUp(false)} />
-                </Modal>
-                <Modal
-                    isOpen={isAddingAcademicReport}
-                    onClose={() => setIsAddingAcademicReport(false)}
-                    title={`Add Academic Report for ${selectedStudent.first_name}`}
-                >
-                   <AcademicReportForm onSave={handleSaveAcademicReport} onCancel={() => setIsAddingAcademicReport(false)} />
-                </Modal>
-                <Modal isOpen={!!editingStudent} onClose={() => setEditingStudent(null)} title="Edit Student Record">
-                    <StudentForm 
-                        initialData={editingStudent}
-                        onSave={handleUpdateStudent} 
-                        onCancel={() => setEditingStudent(null)} 
-                    />
-                </Modal>
-            </>
+            <div className="space-y-4 p-4 bg-gray-2/50 dark:bg-box-dark-2/50">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                    <InfoPair label="Date of Follow Up" value={new Date(record.date_of_follow_up).toLocaleDateString()} />
+                    <InfoPair label="Location" value={record.location} />
+                    <InfoPair label="Parent/Guardian" value={record.parent_guardian} />
+                </div>
+                
+                <Section title="Well-being Progress" hasData={hasWellbeingData}>
+                    <InfoPair label="Physical Health">
+                        {record.physical_health}{record.physical_health_notes && <span className="text-body-color dark:text-gray-300 ml-2 font-normal">- {record.physical_health_notes}</span>}
+                    </InfoPair>
+                     <InfoPair label="Social Interaction">
+                        {record.social_interaction}{record.social_interaction_notes && <span className="text-body-color dark:text-gray-300 ml-2 font-normal">- {record.social_interaction_notes}</span>}
+                    </InfoPair>
+                     <InfoPair label="Home Life">
+                        {record.home_life}{record.home_life_notes && <span className="text-body-color dark:text-gray-300 ml-2 font-normal">- {record.home_life_notes}</span>}
+                    </InfoPair>
+                     <InfoPair label="Drugs, Alcohol, Violence">
+                        {record.drugs_alcohol_violence}{record.drugs_alcohol_violence_notes && <span className="text-body-color dark:text-gray-300 ml-2 font-normal">- {record.drugs_alcohol_violence_notes}</span>}
+                    </InfoPair>
+                </Section>
+
+                <Section title="Risk Factors" hasData={hasRiskData}>
+                    {record.risk_factors_list.length > 0 && 
+                        <InfoPair label="Identified Risks">
+                            <ul className="list-disc list-inside text-sm font-normal">
+                                {record.risk_factors_list.map(r => <li key={r}>{r}</li>)}
+                            </ul>
+                        </InfoPair>
+                    }
+                    {record.risk_factors_details && <InfoPair label="Risk Details" value={record.risk_factors_details} />}
+                    <InfoPair label="Condition of Home">
+                        {record.condition_of_home}{record.condition_of_home_notes && <span className="text-body-color dark:text-gray-300 ml-2 font-normal">- {record.condition_of_home_notes}</span>}
+                    </InfoPair>
+                    {record.current_work_details && <InfoPair label="Family Work Details" value={record.current_work_details}/>}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                       <InfoPair label="Mother Working?" value={record.mother_working}/>
+                       <InfoPair label="Father Working?" value={record.father_working}/>
+                       <InfoPair label="Other Family?" value={record.other_family_member_working}/>
+                       <InfoPair label="Attending Church?" value={record.attending_church}/>
+                    </div>
+                </Section>
+
+                <Section title="Staff Notes & Conclusion" hasData={hasStaffNotesData}>
+                    {record.staff_notes && <InfoPair label="Staff Notes" value={record.staff_notes} />}
+                    {record.changes_recommendations && <InfoPair label="Changes/Recommendations" value={record.changes_recommendations} />}
+                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-stroke dark:border-strokedark">
+                        <InfoPair label="Child Protection Concerns?" value={record.child_protection_concerns} />
+                        <InfoPair label="Human Trafficking Risk?" value={record.human_trafficking_risk} />
+                        <InfoPair label="Completed By" value={`${record.completed_by} on ${new Date(record.date_completed).toLocaleDateString()}`} />
+                        <InfoPair label="Reviewed By" value={record.reviewed_by ? `${record.reviewed_by} on ${new Date(record.date_reviewed).toLocaleDateString()}` : 'N/A'} />
+                    </div>
+                </Section>
+            </div>
         );
-    }
+    };
+
+    const StudentDetailView: React.FC<{ student: Student, onBack: () => void }> = ({ student, onBack }) => (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <button onClick={onBack} className="text-primary hover:underline">← Back to Student List</button>
+                 <div className="flex gap-2">
+                     <button onClick={() => { setSelectedStudent(student); setIsAdding(true); }} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"><EditIcon /> <span className="ml-2">Edit</span></button>
+                    <button onClick={() => handleDeleteStudent(student.student_id)} className="flex items-center bg-danger text-white px-4 py-2 rounded-lg hover:opacity-90"><TrashIcon /> <span className="ml-2">Delete</span></button>
+                 </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-6 items-start">
+                <div className="w-full md:w-1/4 flex flex-col items-center">
+                    <img src={student.profile_photo || 'https://i.pravatar.cc/150'} alt={`${student.first_name}`} className="w-32 h-32 rounded-full object-cover mb-4" />
+                    <h2 className="text-2xl font-bold text-black dark:text-white">{student.first_name} {student.last_name}</h2>
+                    <p className="text-body-color dark:text-gray-300">{student.student_id}</p>
+                     <p className="text-body-color dark:text-gray-300">Age: {calculateAge(student.date_of_birth)}</p>
+                </div>
+                <div className="w-full md:w-3/4">
+                    <DetailCard title="Core Program Data" data={{
+                        'Student Status': student.student_status,
+                        'Sponsorship Status': student.sponsorship_status,
+                        'Sponsor Name': student.sponsor_name,
+                        'School': student.school,
+                        'Current Grade': student.current_grade,
+                        'EEP Enroll Date': new Date(student.eep_enroll_date).toLocaleDateString(),
+                    }} />
+                </div>
+            </div>
+            
+            <DetailCard title="Personal & Family Details" data={{
+                 'Date of Birth': new Date(student.date_of_birth).toLocaleDateString(),
+                 'Gender': student.gender,
+                 'City': student.city,
+                 'Village/Slum': student.village_slum,
+                 'Guardian Name': student.guardian_name,
+                 'Guardian Contact': student.guardian_contact_info,
+                 'Siblings': student.siblings_count,
+                 'Household Members': student.household_members_count,
+                 'Annual Income': `$${student.annual_income}`,
+            }} />
+             <NarrativeDetailCard title="Narrative Information" data={{ 'Child Story': student.child_story, 'Other Notes': student.other_notes }} />
+            
+            <div>
+                 <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-semibold text-black dark:text-white">Academic Reports</h3>
+                    <button onClick={() => setModal('add_report')} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"><DocumentAddIcon /><span className="ml-2">Add Report</span></button>
+                 </div>
+            </div>
+
+            <div>
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-semibold text-black dark:text-white">Follow-up History</h3>
+                    <button onClick={() => setModal('add_follow_up')} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90"><DocumentAddIcon /><span className="ml-2">New Follow-up</span></button>
+                </div>
+                <div className="space-y-2">
+                    {student.follow_up_records && student.follow_up_records.length > 0 ? (
+                        student.follow_up_records
+                            .sort((a,b) => new Date(b.date_of_follow_up).getTime() - new Date(a.date_of_follow_up).getTime())
+                            .map(record => (
+                            <div key={record.id} className="border border-stroke dark:border-strokedark rounded-lg">
+                                <button
+                                    onClick={() => setOpenFollowUpId(openFollowUpId === record.id ? null : record.id)}
+                                    className="w-full p-4 text-left flex justify-between items-center bg-gray-2 dark:bg-box-dark-2 hover:bg-gray/80"
+                                >
+                                    <span className="font-semibold text-black dark:text-white">Follow-up from {new Date(record.date_of_follow_up).toLocaleDateString()}</span>
+                                    <span>{openFollowUpId === record.id ? <ArrowUpIcon /> : <ArrowDownIcon />}</span>
+                                </button>
+                                {openFollowUpId === record.id && <FollowUpRecordView record={record} />}
+                            </div>
+                        ))
+                    ) : (
+                        <p className="text-body-color dark:text-gray-300">No follow-up records found for this student.</p>
+                    )}
+                </div>
+            </div>
+
+            {modal === 'add_report' && (
+                <Modal isOpen={true} onClose={() => setModal(null)} title="Add Academic Report">
+                    <AcademicReportForm studentId={student.student_id} onSave={handleSaveAcademicReport} onCancel={() => setModal(null)} />
+                </Modal>
+            )}
+            {modal === 'add_follow_up' && (
+                <Modal isOpen={true} onClose={() => setModal(null)} title="Add Monthly Follow-up Report">
+                    <FollowUpForm student={student} onSave={handleSaveFollowUp} onCancel={() => setModal(null)} />
+                </Modal>
+            )}
+        </div>
+    );
     
+    if (loading) return <SkeletonTable rows={10} cols={6} />;
+    
+    if (selectedStudent && !isAdding) {
+        return <StudentDetailView student={selectedStudent} onBack={() => setSelectedStudent(null)} />;
+    }
+
     return (
         <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-                <div className="relative w-full sm:w-1/3">
-                    <input
-                        type="text"
-                        placeholder="Search students by name or ID..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full rounded-lg border-[1.5px] border-stroke bg-gray-2 py-2 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary"
-                    />
-                </div>
-                <button onClick={() => setIsAddingStudent(true)} className="flex w-full sm:w-auto justify-center items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
-                    <PlusIcon /> <span className="ml-2">Add Student</span>
-                </button>
+             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                 <input type="text" placeholder="Search students..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full sm:w-1/2 rounded-lg border-[1.5px] border-stroke bg-gray-2 py-2 px-5 font-medium outline-none transition focus:border-primary text-black dark:border-strokedark dark:bg-form-input dark:text-white"/>
+                 <div className="flex w-full sm:w-auto gap-2">
+                    <button onClick={() => setIsImporting(true)} className="flex w-full sm:w-auto justify-center items-center bg-secondary text-white px-4 py-2 rounded-lg hover:opacity-90">
+                        <UploadIcon /> <span className="ml-2">Import</span>
+                    </button>
+                    <button onClick={() => { setSelectedStudent(null); setIsAdding(true); }} className="flex w-full sm:w-auto justify-center items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
+                        <PlusIcon /> <span className="ml-2">Add Student</span>
+                    </button>
+                 </div>
             </div>
 
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-gray-2 dark:bg-box-dark-2">
-                            <th className="p-4 font-medium text-black dark:text-white">
-                                 <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('first_name')}>
-                                    Name
-                                    {sortConfig?.key === 'first_name' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                </button>
-                            </th>
-                            <th className="p-4 font-medium text-black dark:text-white">
-                                <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('current_grade')}>
-                                    Grade
-                                    {sortConfig?.key === 'current_grade' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                </button>
-                            </th>
-                            <th className="p-4 font-medium text-black dark:text-white">
-                                <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('student_status')}>
-                                    Status
-                                    {sortConfig?.key === 'student_status' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                </button>
-                            </th>
-                            <th className="p-4 font-medium text-black dark:text-white">
-                                <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('sponsorship_status')}>
-                                    Sponsorship
-                                    {sortConfig?.key === 'sponsorship_status' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                </button>
-                            </th>
+                    <thead className="bg-gray-2 dark:bg-box-dark-2">
+                        <tr>
+                             {([
+                                { key: 'first_name', label: 'Name' },
+                                { key: 'student_id', label: 'Student ID' },
+                                { key: 'age', label: 'Age' },
+                                { key: 'date_of_birth', label: 'Date of Birth' },
+                                { key: 'student_status', label: 'Status' },
+                                { key: 'sponsorship_status', label: 'Sponsorship' },
+                            ] as {key: keyof Student | 'age', label: string}[]).map(({key, label}) => (
+                                <th key={key} className="p-4 font-medium text-black dark:text-white">
+                                    <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort(key)}>
+                                        {label}
+                                        {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
+                                    </button>
+                                </th>
+                            ))}
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedAndFilteredStudents.map((student, index) => (
-                            <tr key={student.student_id} onClick={() => setSelectedStudent(student)} className={`cursor-pointer hover:bg-gray dark:hover:bg-box-dark-2 ${index === sortedAndFilteredStudents.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}`}>
-                                <td className="p-4 text-black dark:text-white">
-                                    <div className="flex items-center gap-3">
-                                        <img src={student.profile_photo} alt="avatar" className="w-10 h-10 rounded-full" />
-                                        <div>
-                                            <p className="font-medium">{student.first_name} {student.last_name}</p>
-                                            <p className="text-sm text-body-color dark:text-gray-300">{student.student_id}</p>
-                                        </div>
+                        {sortedAndFilteredStudents.map((s, index) => (
+                            <tr key={s.student_id} className="cursor-pointer hover:bg-gray dark:hover:bg-box-dark-2" onClick={() => setSelectedStudent(s)}>
+                                <td className="p-4 flex items-center gap-3">
+                                    <img src={s.profile_photo || `https://i.pravatar.cc/150?u=${s.student_id}`} alt={`${s.first_name}`} className="w-10 h-10 rounded-full object-cover"/>
+                                    <div>
+                                        <p className="font-medium text-black dark:text-white">{s.first_name} {s.last_name}</p>
+                                        <p className="text-sm text-body-color dark:text-gray-300">{s.gender}</p>
                                     </div>
                                 </td>
-                                <td className="p-4 text-body-color dark:text-gray-300">{student.current_grade}</td>
-                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${student.student_status === StudentStatus.ACTIVE ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>{student.student_status}</span></td>
-                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${student.sponsorship_status === SponsorshipStatus.SPONSORED ? 'bg-primary/10 text-primary' : 'bg-warning/10 text-warning'}`}>{student.sponsorship_status}</span></td>
+                                <td className="p-4 text-black dark:text-white">{s.student_id}</td>
+                                <td className="p-4 text-body-color dark:text-gray-300">{calculateAge(s.date_of_birth)}</td>
+                                <td className="p-4 text-body-color dark:text-gray-300">{new Date(s.date_of_birth).toLocaleDateString()}</td>
+                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.student_status === StudentStatus.ACTIVE ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>{s.student_status}</span></td>
+                                <td className="p-4"><span className={`px-2 py-1 text-xs font-semibold rounded-full ${s.sponsorship_status === SponsorshipStatus.SPONSORED ? 'bg-primary/10 text-primary' : 'bg-gray-400/20 text-gray-400'}`}>{s.sponsorship_status}</span></td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
-            {/* Fix: Changed lowercase `modal` to uppercase `Modal`. React components must be capitalized. */}
-            <Modal isOpen={isAddingStudent} onClose={() => setIsAddingStudent(false)} title="Create New Student Record">
-                <StudentForm onSave={handleSaveStudent} onCancel={() => setIsAddingStudent(false)} />
+            
+            <Modal isOpen={isAdding} onClose={() => { setIsAdding(false); setSelectedStudent(null); }} title={selectedStudent ? 'Edit Student' : 'Add New Student'}>
+                <StudentForm 
+                    key={selectedStudent ? selectedStudent.student_id : 'new-student'}
+                    student={selectedStudent} 
+                    onSave={handleSaveStudent} 
+                    onCancel={() => { setIsAdding(false); setSelectedStudent(null); }} 
+                />
             </Modal>
+            
+            {isImporting && <StudentImportModal onImport={handleImport} onClose={() => setIsImporting(false)} />}
         </div>
     );
 };

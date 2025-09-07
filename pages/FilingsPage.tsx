@@ -3,21 +3,29 @@ import { api } from '../services/api';
 import { GovernmentFiling, FilingStatus } from '../types';
 import Modal from '../components/Modal';
 import { useNotification } from '../contexts/NotificationContext';
-import { ArrowUpIcon, ArrowDownIcon } from '../components/Icons';
+import { ArrowUpIcon, ArrowDownIcon, PlusIcon, EditIcon, TrashIcon } from '../components/Icons';
 import { SkeletonTable } from '../components/SkeletonLoader';
 
-const FilingForm: React.FC<{ filing: GovernmentFiling; onSave: (filing: GovernmentFiling) => void; onCancel: () => void; }> = ({ filing, onSave, onCancel }) => {
-    const [formData, setFormData] = useState<GovernmentFiling>(filing);
-    const [file, setFile] = useState<File | null>(null);
+const FilingForm: React.FC<{ filing?: GovernmentFiling | null; onSave: (filing: any) => void; onCancel: () => void; }> = ({ filing, onSave, onCancel }) => {
+    const isEdit = !!filing;
     const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-500 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary";
+    const labelClass = "block text-sm font-medium text-black dark:text-white mb-1";
 
-    useEffect(() => {
-        setFormData(filing);
-    }, [filing]);
+    const [formData, setFormData] = useState(() => {
+         return isEdit && filing ? 
+            { ...filing, due_date: new Date(filing.due_date).toISOString().split('T')[0], submission_date: filing.submission_date ? new Date(filing.submission_date).toISOString().split('T')[0] : '' } 
+            : 
+            { document_name: '', authority: '', due_date: new Date().toISOString().split('T')[0], submission_date: '', status: FilingStatus.PENDING, attached_file: undefined };
+    });
+    const [file, setFile] = useState<File | null>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value, status: name === 'submission_date' && value ? FilingStatus.SUBMITTED : prev.status }));
+        setFormData(prev => ({ 
+            ...prev, 
+            [name]: value, 
+            status: (name === 'submission_date' && value) || (name === 'status' && value === FilingStatus.SUBMITTED) ? FilingStatus.SUBMITTED : FilingStatus.PENDING 
+        }));
     };
     
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,27 +42,35 @@ const FilingForm: React.FC<{ filing: GovernmentFiling; onSave: (filing: Governme
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label className="block text-sm font-medium text-black dark:text-white">Document Name</label>
-                <p className="mt-1 text-lg font-semibold text-black dark:text-white">{formData.document_name}</p>
+                <label htmlFor="document_name" className={labelClass}>Document Name</label>
+                <input type="text" id="document_name" name="document_name" value={formData.document_name} onChange={handleChange} className={formInputClass} required />
+            </div>
+             <div>
+                <label htmlFor="authority" className={labelClass}>Authority</label>
+                <input type="text" id="authority" name="authority" value={formData.authority} onChange={handleChange} className={formInputClass} required />
+            </div>
+             <div>
+                <label htmlFor="due_date" className={labelClass}>Due Date</label>
+                <input type="date" id="due_date" name="due_date" value={formData.due_date} onChange={handleChange} className={formInputClass} required />
             </div>
             <div>
-                <label htmlFor="status" className="block text-sm font-medium text-black dark:text-white mb-1">Status</label>
+                <label htmlFor="status" className={labelClass}>Status</label>
                 <select id="status" name="status" value={formData.status} onChange={handleChange} className={formInputClass}>
                     {Object.values(FilingStatus).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
             </div>
             <div>
-                <label htmlFor="submission_date" className="block text-sm font-medium text-black dark:text-white mb-1">Submission Date</label>
-                <input type="date" id="submission_date" name="submission_date" value={formData.submission_date?.split('T')[0] || ''} onChange={handleChange} className={formInputClass} />
+                <label htmlFor="submission_date" className={labelClass}>Submission Date</label>
+                <input type="date" id="submission_date" name="submission_date" value={formData.submission_date || ''} onChange={handleChange} className={formInputClass} />
             </div>
             <div>
-                <label htmlFor="attached_file" className="block text-sm font-medium text-black dark:text-white mb-1">Attach File</label>
+                <label htmlFor="attached_file" className={labelClass}>Attach File</label>
                 <input type="file" id="attached_file" name="attached_file" onChange={handleFileChange} className={formInputClass} />
                 {formData.attached_file && typeof formData.attached_file === 'string' && <p className="text-xs mt-1 text-body-color dark:text-gray-300">Current file: {formData.attached_file}</p>}
             </div>
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Update Filing</button>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">{isEdit ? 'Update Filing' : 'Save Filing'}</button>
             </div>
         </form>
     );
@@ -63,6 +79,7 @@ const FilingForm: React.FC<{ filing: GovernmentFiling; onSave: (filing: Governme
 const FilingsPage: React.FC = () => {
     const [filings, setFilings] = useState<GovernmentFiling[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isAdding, setIsAdding] = useState(false);
     const [selectedFiling, setSelectedFiling] = useState<GovernmentFiling | null>(null);
     const [sortConfig, setSortConfig] = useState<{ key: keyof GovernmentFiling; order: 'asc' | 'desc' } | null>({ key: 'due_date', order: 'asc' });
     const { showToast } = useNotification();
@@ -115,16 +132,33 @@ const FilingsPage: React.FC = () => {
         return sortableItems;
     }, [filings, sortConfig]);
 
-
-    const handleSave = async (filing: GovernmentFiling) => {
+    const handleSave = async (filingData: GovernmentFiling | Omit<GovernmentFiling, 'id'>) => {
         try {
-            await api.updateFiling(filing);
-            setSelectedFiling(null);
-            showToast('Filing updated successfully!', 'success');
+            if ('id' in filingData) { // Update
+                await api.updateFiling(filingData);
+                setSelectedFiling(null);
+                showToast('Filing updated successfully!', 'success');
+            } else { // Create
+                await api.addFiling(filingData);
+                setIsAdding(false);
+                showToast('Filing added successfully!', 'success');
+            }
             fetchFilings();
         } catch (error) {
-            console.error('Failed to update filing', error);
-            showToast('Failed to update filing.', 'error');
+            console.error('Failed to save filing', error);
+            showToast('Failed to save filing.', 'error');
+        }
+    };
+
+    const handleDelete = async (filingId: string) => {
+        if (window.confirm('Are you sure you want to delete this filing record? This action cannot be undone.')) {
+            try {
+                await api.deleteFiling(filingId);
+                showToast('Filing deleted successfully.', 'success');
+                fetchFilings();
+            } catch (error: any) {
+                showToast(error.message || 'Failed to delete filing.', 'error');
+            }
         }
     };
 
@@ -132,7 +166,12 @@ const FilingsPage: React.FC = () => {
 
     return (
         <div className="rounded-lg border border-stroke bg-white dark:bg-box-dark p-6 shadow-sm">
-            <h3 className="text-xl font-semibold text-black dark:text-white mb-4">Government Filings</h3>
+            <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-black dark:text-white">Government Filings</h3>
+                <button onClick={() => setIsAdding(true)} className="flex items-center bg-primary text-white px-4 py-2 rounded-lg hover:opacity-90">
+                    <PlusIcon /> <span className="ml-2">New Filing</span>
+                </button>
+            </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left">
                     <thead className="bg-gray-2 dark:bg-box-dark-2">
@@ -156,30 +195,30 @@ const FilingsPage: React.FC = () => {
                                 </button>
                             </th>
                             <th className="p-4 font-medium text-black dark:text-white">
-                                <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('submission_date')}>
-                                    Submitted
-                                    {sortConfig?.key === 'submission_date' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
-                                </button>
-                            </th>
-                            <th className="p-4 font-medium text-black dark:text-white">
                                 <button className="flex items-center gap-1 hover:text-primary dark:hover:text-primary transition-colors" onClick={() => handleSort('status')}>
                                     Status
                                     {sortConfig?.key === 'status' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
                                 </button>
                             </th>
+                            <th className="p-4 font-medium text-black dark:text-white">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {sortedFilings.map((f, index) => (
-                            <tr key={f.id} onClick={() => setSelectedFiling(f)} className={`cursor-pointer hover:bg-gray dark:hover:bg-box-dark-2 ${index === sortedFilings.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}`}>
+                            <tr key={f.id} className={`hover:bg-gray dark:hover:bg-box-dark-2 ${index === sortedFilings.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}`}>
                                 <td className="p-4 font-medium text-black dark:text-white">{f.document_name}</td>
                                 <td className="p-4 text-body-color dark:text-gray-300">{f.authority}</td>
                                 <td className="p-4 text-body-color dark:text-gray-300">{new Date(f.due_date).toLocaleDateString()}</td>
-                                <td className="p-4 text-body-color dark:text-gray-300">{f.submission_date ? new Date(f.submission_date).toLocaleDateString() : 'N/A'}</td>
                                 <td className="p-4">
                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${f.status === FilingStatus.SUBMITTED ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
                                         {f.status}
                                     </span>
+                                </td>
+                                <td className="p-4">
+                                    <div className="flex items-center space-x-3.5">
+                                        <button onClick={() => setSelectedFiling(f)} className="hover:text-primary"><EditIcon /></button>
+                                        <button onClick={() => handleDelete(f.id)} className="hover:text-danger"><TrashIcon /></button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -187,11 +226,14 @@ const FilingsPage: React.FC = () => {
                 </table>
             </div>
 
-            {selectedFiling && (
-                <Modal isOpen={!!selectedFiling} onClose={() => setSelectedFiling(null)} title="Update Government Filing">
-                    <FilingForm filing={selectedFiling} onSave={handleSave} onCancel={() => setSelectedFiling(null)} />
-                </Modal>
-            )}
+            <Modal isOpen={isAdding || !!selectedFiling} onClose={() => { setIsAdding(false); setSelectedFiling(null); }} title={selectedFiling ? 'Update Government Filing' : 'Add New Government Filing'}>
+                <FilingForm 
+                    key={selectedFiling ? selectedFiling.id : 'new-filing'}
+                    filing={selectedFiling} 
+                    onSave={handleSave} 
+                    onCancel={() => { setIsAdding(false); setSelectedFiling(null); }} 
+                />
+            </Modal>
         </div>
     );
 };

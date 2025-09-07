@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
 import { Student, SponsorshipStatus, Transaction, TransactionType } from '../types';
 import { PrintIcon, ArrowDownIcon, ArrowUpIcon } from '../components/Icons';
@@ -64,9 +64,40 @@ const StudentMasterList = () => {
     const [reportData, setReportData] = useState<Student[] | null>(null);
     const [loading, setLoading] = useState(false);
     const { showToast } = useNotification();
+    const [sortConfig, setSortConfig] = useState<{ key: keyof Student; order: 'asc' | 'desc' } | null>(null);
+
+    const handleSort = (key: keyof Student) => {
+        let order: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.order === 'asc') {
+            order = 'desc';
+        }
+        setSortConfig({ key, order });
+    };
+
+    const sortedReportData = useMemo(() => {
+        if (!reportData) return [];
+        let sortableItems = [...reportData];
+        if (sortConfig) {
+            sortableItems.sort((a, b) => {
+                const aVal = a[sortConfig.key];
+                const bVal = b[sortConfig.key];
+                
+                if (sortConfig.key === 'date_of_birth') {
+                    return (new Date(aVal as string).getTime() - new Date(bVal as string).getTime()) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+
+                if (String(aVal).localeCompare(String(bVal)) !== 0) {
+                    return String(aVal).localeCompare(String(bVal)) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [reportData, sortConfig]);
 
     const generateReport = useCallback(async () => {
         setLoading(true);
+        setSortConfig(null);
         try {
             const data = await api.getStudents();
             setReportData(data);
@@ -90,17 +121,26 @@ const StudentMasterList = () => {
                         <table className="w-full text-left text-sm">
                             <thead className="bg-gray-2 dark:bg-box-dark-2">
                                 <tr>
-                                    <th className="p-2 font-medium text-black dark:text-white">Student ID</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Full Name</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">DOB</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Grade</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Status</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Sponsorship</th>
+                                    {([
+                                        { key: 'student_id', label: 'Student ID' },
+                                        { key: 'first_name', label: 'Full Name' },
+                                        { key: 'date_of_birth', label: 'DOB' },
+                                        { key: 'current_grade', label: 'Grade' },
+                                        { key: 'student_status', label: 'Status' },
+                                        { key: 'sponsorship_status', label: 'Sponsorship' },
+                                    ] as { key: keyof Student, label: string }[]).map(({ key, label }) => (
+                                        <th key={key} className="p-2 font-medium text-black dark:text-white">
+                                            <button className="flex items-center gap-1 hover:text-primary" onClick={() => handleSort(key)}>
+                                                {label}
+                                                {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
+                                            </button>
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {reportData.map((s, i) => (
-                                    <tr key={s.student_id} className={i === reportData.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
+                                {sortedReportData.map((s, i) => (
+                                    <tr key={s.student_id} className={i === sortedReportData.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
                                         <td className="p-2 text-black dark:text-white">{s.student_id}</td>
                                         <td className="p-2 text-black dark:text-white">{s.first_name} {s.last_name}</td>
                                         <td className="p-2 text-body-color dark:text-gray-300">{new Date(s.date_of_birth).toLocaleDateString()}</td>
@@ -123,9 +163,35 @@ const SponsorshipStatusReport = () => {
     const [reportData, setReportData] = useState<Student[] | null>(null);
     const [loading, setLoading] = useState(false);
     const { showToast } = useNotification();
+    const [sortConfig, setSortConfig] = useState<{ key: keyof Student; order: 'asc' | 'desc' } | null>(null);
+
+    const handleSort = (key: keyof Student) => {
+        let order: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.order === 'asc') {
+            order = 'desc';
+        }
+        setSortConfig({ key, order });
+    };
+
+    const sortedReportData = useMemo(() => {
+        if (!reportData) return [];
+        let sortableItems = [...reportData];
+        if (sortConfig) {
+            sortableItems.sort((a, b) => {
+                const aVal = a[sortConfig.key];
+                const bVal = b[sortConfig.key];
+                if (String(aVal).localeCompare(String(bVal)) !== 0) {
+                    return String(aVal).localeCompare(String(bVal)) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [reportData, sortConfig]);
     
     const generateReport = useCallback(async () => {
         setLoading(true);
+        setSortConfig(null);
         try {
             const data = await api.getSponsorshipReport(filter);
             setReportData(data);
@@ -155,16 +221,25 @@ const SponsorshipStatusReport = () => {
                         <table className="w-full text-left text-sm">
                             <thead className="bg-gray-2 dark:bg-box-dark-2">
                                 <tr>
-                                    <th className="p-2 font-medium text-black dark:text-white">Student ID</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Full Name</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Grade</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Sponsorship</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Sponsor Name</th>
+                                    {([
+                                        { key: 'student_id', label: 'Student ID' },
+                                        { key: 'first_name', label: 'Full Name' },
+                                        { key: 'current_grade', label: 'Grade' },
+                                        { key: 'sponsorship_status', label: 'Sponsorship' },
+                                        { key: 'sponsor_name', label: 'Sponsor Name' },
+                                    ] as { key: keyof Student, label: string }[]).map(({ key, label }) => (
+                                        <th key={key} className="p-2 font-medium text-black dark:text-white">
+                                            <button className="flex items-center gap-1 hover:text-primary" onClick={() => handleSort(key)}>
+                                                {label}
+                                                {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
+                                            </button>
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {reportData.map((s, i) => (
-                                    <tr key={s.student_id} className={i === reportData.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
+                                {sortedReportData.map((s, i) => (
+                                    <tr key={s.student_id} className={i === sortedReportData.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
                                         <td className="p-2 text-black dark:text-white">{s.student_id}</td>
                                         <td className="p-2 text-black dark:text-white">{s.first_name} {s.last_name}</td>
                                         <td className="p-2 text-body-color dark:text-gray-300">{s.current_grade}</td>
@@ -193,6 +268,39 @@ const FinancialSummaryReport = () => {
     const [reportData, setReportData] = useState<FinancialSummaryData | null>(null);
     const [loading, setLoading] = useState(false);
     const { showToast } = useNotification();
+    const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction; order: 'asc' | 'desc' } | null>(null);
+    
+    const handleSort = (key: keyof Transaction) => {
+        let order: 'asc' | 'desc' = 'asc';
+        if (sortConfig && sortConfig.key === key && sortConfig.order === 'asc') {
+            order = 'desc';
+        }
+        setSortConfig({ key, order });
+    };
+
+    const sortedTransactions = useMemo(() => {
+        if (!reportData?.transactions) return [];
+        let sortableItems = [...reportData.transactions];
+        if (sortConfig) {
+            sortableItems.sort((a, b) => {
+                const aVal = a[sortConfig.key];
+                const bVal = b[sortConfig.key];
+                
+                if (sortConfig.key === 'date') {
+                    return (new Date(aVal as string).getTime() - new Date(bVal as string).getTime()) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                if (sortConfig.key === 'amount') {
+                    return ((aVal as number) - (bVal as number)) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+
+                if (String(aVal).localeCompare(String(bVal)) !== 0) {
+                    return String(aVal).localeCompare(String(bVal)) * (sortConfig.order === 'asc' ? 1 : -1);
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [reportData, sortConfig]);
     
     const generateReport = useCallback(async () => {
         if (!startDate || !endDate) {
@@ -200,6 +308,7 @@ const FinancialSummaryReport = () => {
             return;
         }
         setLoading(true);
+        setSortConfig(null);
         try {
             const data = await api.getFinancialSummary(startDate, endDate);
             setReportData(data);
@@ -233,15 +342,24 @@ const FinancialSummaryReport = () => {
                          <table className="w-full text-left text-sm">
                             <thead className="bg-gray-2 dark:bg-box-dark-2">
                                 <tr>
-                                    <th className="p-2 font-medium text-black dark:text-white">Date</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Description</th>
-                                    <th className="p-2 font-medium text-black dark:text-white">Category</th>
-                                    <th className="p-2 font-medium text-black dark:text-white text-right">Amount</th>
+                                    {([
+                                        { key: 'date', label: 'Date' },
+                                        { key: 'description', label: 'Description' },
+                                        { key: 'category', label: 'Category' },
+                                        { key: 'amount', label: 'Amount' },
+                                    ] as { key: keyof Transaction, label: string }[]).map(({ key, label }) => (
+                                        <th key={key} className={`p-2 font-medium text-black dark:text-white ${key === 'amount' ? 'text-right' : ''}`}>
+                                            <button className={`flex items-center gap-1 hover:text-primary ${key === 'amount' ? 'w-full justify-end' : ''}`} onClick={() => handleSort(key)}>
+                                                {label}
+                                                {sortConfig?.key === key && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
+                                            </button>
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                {reportData.transactions.map((t, i) => (
-                                    <tr key={t.id} className={i === reportData.transactions.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
+                                {sortedTransactions.map((t, i) => (
+                                    <tr key={t.id} className={i === sortedTransactions.length - 1 ? '' : 'border-b border-stroke dark:border-strokedark'}>
                                         <td className="p-2 text-black dark:text-white">{new Date(t.date).toLocaleDateString()}</td>
                                         <td className="p-2 text-black dark:text-white">{t.description}</td>
                                         <td className="p-2 text-body-color dark:text-gray-300">{t.category}</td>

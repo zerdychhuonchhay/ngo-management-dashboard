@@ -1,22 +1,34 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../services/api';
-import { Transaction, TransactionType, Student } from '../types';
+import { Transaction, TransactionType, Student, TRANSACTION_CATEGORIES } from '../types';
 import Modal from '../components/Modal';
-import { PlusIcon, ArrowUpIcon, ArrowDownIcon } from '../components/Icons';
+import { PlusIcon, ArrowUpIcon, ArrowDownIcon, EditIcon, TrashIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 import { SkeletonTable } from '../components/SkeletonLoader';
 
-const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>) => void; onCancel: () => void; students: Student[] }> = ({ onSave, onCancel, students }) => {
+const TransactionForm: React.FC<{ 
+    onSave: (transaction: Omit<Transaction, 'id'> | Transaction) => void; 
+    onCancel: () => void; 
+    students: Student[],
+    initialData?: Transaction | null;
+}> = ({ onSave, onCancel, students, initialData }) => {
+    const isEdit = !!initialData;
     const formInputClass = "w-full rounded border-[1.5px] border-stroke bg-gray-2 py-3 px-5 font-medium outline-none transition focus:border-primary active:border-primary text-black placeholder:text-gray-600 dark:border-strokedark dark:bg-form-input dark:text-white dark:placeholder:text-gray-400 dark:focus:border-primary";
     const labelClass = "block text-sm font-medium text-black dark:text-white mb-1";
-    const [formData, setFormData] = useState<Omit<Transaction, 'id'>>({
-        date: new Date().toISOString().split('T')[0],
-        description: '',
-        location: '',
-        amount: 0,
-        type: TransactionType.EXPENSE,
-        category: '',
-        student_id: ''
+    
+    const [formData, setFormData] = useState(() => {
+        if (isEdit && initialData) {
+            return { ...initialData, date: new Date(initialData.date).toISOString().split('T')[0] };
+        }
+        return {
+            date: new Date().toISOString().split('T')[0],
+            description: '',
+            location: '',
+            amount: 0,
+            type: TransactionType.EXPENSE,
+            category: TRANSACTION_CATEGORIES[3], // Default to a common expense
+            student_id: ''
+        };
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -26,7 +38,10 @@ const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>)
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (window.confirm('Are you sure you want to save this transaction?')) {
+        const confirmationMessage = isEdit 
+            ? 'Are you sure you want to save these changes?'
+            : 'Are you sure you want to save this transaction?';
+        if (window.confirm(confirmationMessage)) {
             onSave(formData);
         }
     };
@@ -58,7 +73,9 @@ const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>)
                 </div>
                 <div>
                     <label htmlFor="category" className={labelClass}>Category</label>
-                    <input id="category" type="text" name="category" placeholder="e.g., Gas, School Fees" value={formData.category} onChange={handleChange} className={formInputClass} required />
+                    <select id="category" name="category" value={formData.category} onChange={handleChange} className={formInputClass} required>
+                        {TRANSACTION_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
                 </div>
             </div>
             <div>
@@ -70,7 +87,7 @@ const TransactionForm: React.FC<{ onSave: (transaction: Omit<Transaction, 'id'>)
             </div>
             <div className="flex justify-end space-x-2 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 rounded bg-gray dark:bg-box-dark-2 hover:opacity-90">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">Save Transaction</button>
+                <button type="submit" className="px-4 py-2 rounded bg-primary text-white hover:opacity-90">{isEdit ? 'Update Transaction' : 'Save Transaction'}</button>
             </div>
         </form>
     );
@@ -81,6 +98,7 @@ const TransactionsPage: React.FC = () => {
     const [students, setStudents] = useState<Student[]>([]);
     const [loading, setLoading] = useState(true);
     const [isAdding, setIsAdding] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
     const [filterType, setFilterType] = useState<'All' | TransactionType>('All');
     const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction; order: 'asc' | 'desc' } | null>({ key: 'date', order: 'desc' });
     const { showToast } = useNotification();
@@ -103,17 +121,36 @@ const TransactionsPage: React.FC = () => {
         fetchTransactions();
     }, [fetchTransactions]);
 
-    const handleSave = async (transaction: Omit<Transaction, 'id'>) => {
+    const handleSave = async (transaction: Omit<Transaction, 'id'> | Transaction) => {
         try {
-            await api.addTransaction(transaction);
-            setIsAdding(false);
-            showToast('Transaction logged successfully!', 'success');
+            if ('id' in transaction) { // Update
+                await api.updateTransaction(transaction);
+                setEditingTransaction(null);
+                showToast('Transaction updated successfully!', 'success');
+            } else { // Create
+                await api.addTransaction(transaction);
+                setIsAdding(false);
+                showToast('Transaction logged successfully!', 'success');
+            }
             fetchTransactions();
         } catch (error) {
-            console.error('Failed to add transaction', error);
-            showToast('Failed to log transaction.', 'error');
+            console.error('Failed to save transaction', error);
+            showToast('Failed to save transaction.', 'error');
         }
     };
+    
+    const handleDelete = async (transactionId: string) => {
+        if (window.confirm('Are you sure you want to delete this transaction?')) {
+            try {
+                await api.deleteTransaction(transactionId);
+                showToast('Transaction deleted.', 'success');
+                fetchTransactions();
+            } catch (error: any) {
+                showToast(error.message || 'Failed to delete transaction.', 'error');
+            }
+        }
+    };
+
 
     const handleSort = (key: keyof Transaction) => {
         let order: 'asc' | 'desc' = 'asc';
@@ -207,6 +244,7 @@ const TransactionsPage: React.FC = () => {
                                     {sortConfig?.key === 'amount' && (sortConfig.order === 'asc' ? <ArrowUpIcon /> : <ArrowDownIcon />)}
                                 </button>
                             </th>
+                             <th className="p-4 font-medium text-black dark:text-white">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -223,14 +261,26 @@ const TransactionsPage: React.FC = () => {
                                 <td className={`p-4 font-medium text-right ${t.type === TransactionType.INCOME ? 'text-success' : 'text-danger'}`}>
                                     ${t.amount.toFixed(2)}
                                 </td>
+                                <td className="p-4">
+                                    <div className="flex items-center space-x-3.5">
+                                        <button onClick={() => setEditingTransaction(t)} className="hover:text-primary"><EditIcon /></button>
+                                        <button onClick={() => handleDelete(t.id)} className="hover:text-danger"><TrashIcon /></button>
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
             </div>
 
-            <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Log a New Transaction">
-                <TransactionForm onSave={handleSave} onCancel={() => setIsAdding(false)} students={students} />
+            <Modal isOpen={isAdding || !!editingTransaction} onClose={() => { setIsAdding(false); setEditingTransaction(null); }} title={editingTransaction ? 'Edit Transaction' : 'Log a New Transaction'}>
+                <TransactionForm 
+                    key={editingTransaction ? editingTransaction.id : 'new-transaction'}
+                    onSave={handleSave} 
+                    onCancel={() => { setIsAdding(false); setEditingTransaction(null); }} 
+                    students={students}
+                    initialData={editingTransaction}
+                />
             </Modal>
         </div>
     );

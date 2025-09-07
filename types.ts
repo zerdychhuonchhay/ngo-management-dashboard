@@ -168,24 +168,6 @@ export interface FollowUpRecord {
     other_family_member_working: YesNo;
     current_work_details: string;
     attending_church: YesNo;
-    
-    // Section 3: Educational Progress
-    school_name: string;
-    grade_level: string;
-    attendance: string;
-    subjects_grades: Array<{ subject: string, grade: string }>;
-    learning_difficulties: YesNo;
-    learning_difficulties_notes: string;
-    behaviour_in_class: WellbeingStatus;
-    behaviour_in_class_notes: string;
-    peer_issues: YesNo;
-    peer_issues_notes: string;
-    teacher_involvement: YesNo;
-    teacher_involvement_notes: string;
-    transportation: WellbeingStatus;
-    transportation_notes: string;
-    tutoring_participation: WellbeingStatus;
-    tutoring_participation_notes: string;
 
     // Section 4: EEP Staff Notes
     staff_notes: string;
@@ -205,6 +187,21 @@ export enum TransactionType {
     INCOME = 'Income',
     EXPENSE = 'Expense',
 }
+
+export const TRANSACTION_CATEGORIES = [
+    'Donation',
+    'Grant',
+    'School Fees',
+    'Utilities',
+    'Salaries',
+    'Rent',
+    'Supplies',
+    'Hot Lunches',
+    'Gifts',
+    'Transportation',
+    'Other Income',
+    'Other Expense',
+];
 
 export interface Transaction {
     id: string;
@@ -230,4 +227,25 @@ export interface GovernmentFiling {
     submission_date?: string;
     status: FilingStatus;
     attached_file?: File | string;
+}
+
+export enum TaskStatus {
+    TO_DO = 'To Do',
+    IN_PROGRESS = 'In Progress',
+    DONE = 'Done',
+}
+
+export enum TaskPriority {
+    HIGH = 'High',
+    MEDIUM = 'Medium',
+    LOW = 'Low',
+}
+
+export interface Task {
+    id: string;
+    title: string;
+    description: string;
+    dueDate: string;
+    priority: TaskPriority;
+    status: TaskStatus;
 }
